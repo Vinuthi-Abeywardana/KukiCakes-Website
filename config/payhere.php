@@ -21,15 +21,20 @@ if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'payhere.php') {
 // (Can be overridden via environment variables if desired)
 // ---------------------------------------------------------------
 
-// Replace with your real Sandbox Merchant ID (e.g. '1211111' or your merchant number)
+// PayHere Sandbox Merchant ID
 if (!defined('PAYHERE_MERCHANT_ID')) {
-    define('PAYHERE_MERCHANT_ID', getenv('PAYHERE_MERCHANT_ID') ?: '12XXXXX');
+    define('PAYHERE_MERCHANT_ID', getenv('PAYHERE_MERCHANT_ID') ?: '1238330');
 }
 
-// Replace with your real Sandbox Merchant Secret from the PayHere Dashboard
+// PayHere Sandbox Merchant Secret
 // CRITICAL: MUST REMAIN SERVER-SIDE ONLY. NEVER EXPOSE IN FRONTEND CODE OR JSON.
 if (!defined('PAYHERE_MERCHANT_SECRET')) {
-    define('PAYHERE_MERCHANT_SECRET', getenv('PAYHERE_MERCHANT_SECRET') ?: 'YOUR_PAYHERE_MERCHANT_SECRET_HERE');
+    define('PAYHERE_MERCHANT_SECRET', getenv('PAYHERE_MERCHANT_SECRET') ?: 'MzA5MDEyNjg0NDEwOTkwMjU0MzQyMjY0MzEyODc0MTQ3NjIxOTkx');
+}
+
+// PayHere registered domain / host (Sandbox domain)
+if (!defined('PAYHERE_DOMAIN')) {
+    define('PAYHERE_DOMAIN', getenv('PAYHERE_DOMAIN') ?: 'localhost');
 }
 
 // Integration mode: true for PayHere Sandbox testing, false for Live production

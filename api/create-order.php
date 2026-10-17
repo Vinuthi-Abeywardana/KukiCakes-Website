@@ -316,7 +316,7 @@ try {
 
         $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['SERVER_PORT'] ?? 80) == 443;
         $protocol = $isHttps ? 'https://' : 'http://';
-        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $host = (defined('PAYHERE_DOMAIN') && PAYHERE_DOMAIN) ? PAYHERE_DOMAIN : ($_SERVER['HTTP_HOST'] ?? 'localhost');
         $baseAppUrl = rtrim($protocol . $host, '/') . '/KukiCakes-Website';
 
         // Cryptographic hash calculated on server using PAYHERE_MERCHANT_SECRET
