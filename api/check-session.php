@@ -12,13 +12,28 @@
  */
 require_once __DIR__ . '/bootstrap.php';
 
-if (!empty($_SESSION['customer_id'])) {
+if (isAdmin()) {
+    respond([
+        'authenticated' => true,
+        'user' => [
+            'admin_id' => (int) $_SESSION['admin_id'],
+            'name'     => (string) ($_SESSION['name'] ?? ''),
+            'email'    => (string) ($_SESSION['email'] ?? ''),
+            'role'     => 'admin',
+            'is_admin' => true,
+        ],
+    ]);
+}
+
+if (!empty($_SESSION['customer_id']) && (($_SESSION['role'] ?? 'customer') === 'customer')) {
     respond([
         'authenticated' => true,
         'user' => [
             'customer_id' => (int) $_SESSION['customer_id'],
-            'name'        => $_SESSION['name']  ?? '',
-            'email'       => $_SESSION['email'] ?? '',
+            'name'        => (string) ($_SESSION['name']  ?? ''),
+            'email'       => (string) ($_SESSION['email'] ?? ''),
+            'role'        => (string) ($_SESSION['role'] ?? 'customer'),
+            'is_admin'    => false,
         ],
     ]);
 }

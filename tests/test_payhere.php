@@ -173,6 +173,9 @@ assertTest($payhereParams['order_id'] === $orderNumber, "PayHere order_id matche
 assertTest($payhereParams['currency'] === 'LKR', "PayHere currency is 'LKR'");
 assertTest((float)$payhereParams['amount'] === (float)$cardOrder['total'], "PayHere amount matches server order total (Rs. " . $cardOrder['total'] . ")");
 assertTest(!empty($payhereParams['hash']), "PayHere hash is present and populated");
+assertTest($payhereParams['notify_url'] === 'https://roundup-taco-cage.ngrok-free.dev/KukiCakes-Website/api/payhere-notify.php', "PayHere notify_url uses public ngrok tunnel endpoint");
+assertTest($payhereParams['return_url'] === 'http://localhost/KukiCakes-Website/#confirmation', "PayHere return_url remains on localhost");
+assertTest($payhereParams['cancel_url'] === 'http://localhost/KukiCakes-Website/#checkout', "PayHere cancel_url remains on localhost");
 
 // CRITICAL SECURITY ASSERTION: Merchant Secret must NEVER appear in JSON response
 $jsonResponseStr = $cardOrderRes['raw'];

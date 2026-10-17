@@ -1,4 +1,7 @@
-const { products, gallery } = window.kukiData;
+const gallery = (window.kukiData && Array.isArray(window.kukiData.gallery)) ? window.kukiData.gallery : [];
+let products = [];
+let isCatalogLoading = false;
+let catalogError = null;
 let cart = JSON.parse(localStorage.getItem('kukiCart') || '[]');
 let activeProduct = null;
 let searchTerm = '';
@@ -10,6 +13,14 @@ function productCard(product) {
 }
 
 function renderAllProducts() {
+	if (isCatalogLoading) {
+		if ($('#allProducts')) $('#allProducts').innerHTML = '<div class="search-empty catalog-loading"><div style="font-size:32px;margin-bottom:8px">🧁</div><h3>Loading our fresh cakes...</h3><p>Connecting to our bakery catalog.</p></div>';
+		return;
+	}
+	if (catalogError) {
+		if ($('#allProducts')) $('#allProducts').innerHTML = `<div class="search-empty catalog-error"><div style="font-size:32px;margin-bottom:8px">⚠️</div><h3>Unable to load cakes</h3><p>${catalogError}</p><button type="button" class="btn btn-primary" id="retryCatalogBtn" style="margin-top:14px">Try again</button></div>`;
+		return;
+	}
 	const activeFilter = document.querySelector('.filter.active')?.dataset.filter || 'all';
 	const sort = $('#priceSort')?.value || 'default';
 	const visibleProducts = products.filter(product => {
@@ -20,14 +31,75 @@ function renderAllProducts() {
 	if (sort === 'new') visibleProducts.sort((first, second) => second.id - first.id);
 	if (sort === 'low-high') visibleProducts.sort((first, second) => first.price - second.price);
 	if (sort === 'high-low') visibleProducts.sort((first, second) => second.price - first.price);
-	$('#allProducts').innerHTML = visibleProducts.length ? visibleProducts.map(productCard).join('') : '<div class="search-empty"><h3>No cakes found</h3><p>Try a different name, flavour or category.</p></div>';
+	if ($('#allProducts')) {
+		$('#allProducts').innerHTML = visibleProducts.length ? visibleProducts.map(productCard).join('') : '<div class="search-empty"><h3>No cakes found</h3><p>Try a different name, flavour or category.</p></div>';
+	}
 }
 
 function renderCatalog() {
-	$('#featuredProducts').innerHTML = products.slice(0, 4).map(productCard).join('');
-	renderAllProducts();
-	$('#galleryGrid').innerHTML = gallery.map(item => `<article class="gallery-item"><img src="${item.img}" alt="${item.title}"><div class="gallery-overlay"><b>${item.title}</b></div></article>`).join('');
+	if (isCatalogLoading) {
+		const loadingHtml = '<div class="search-empty catalog-loading"><div style="font-size:32px;margin-bottom:8px">🧁</div><h3>Loading our fresh cakes...</h3><p>Connecting to our bakery catalog.</p></div>';
+		if ($('#featuredProducts')) $('#featuredProducts').innerHTML = loadingHtml;
+		if ($('#allProducts')) $('#allProducts').innerHTML = loadingHtml;
+	} else if (catalogError) {
+		const errorHtml = `<div class="search-empty catalog-error"><div style="font-size:32px;margin-bottom:8px">⚠️</div><h3>Unable to load cakes</h3><p>${catalogError}</p><button type="button" class="btn btn-primary" id="retryCatalogBtn" style="margin-top:14px">Try again</button></div>`;
+		if ($('#featuredProducts')) $('#featuredProducts').innerHTML = errorHtml;
+		if ($('#allProducts')) $('#allProducts').innerHTML = errorHtml;
+	} else {
+		if ($('#featuredProducts')) $('#featuredProducts').innerHTML = products.slice(0, 4).map(productCard).join('');
+		renderAllProducts();
+	}
+	if ($('#galleryGrid')) $('#galleryGrid').innerHTML = gallery.map(item => `<article class="gallery-item"><img src="${item.img}" alt="${item.title}"><div class="gallery-overlay"><b>${item.title}</b></div></article>`).join('');
 }
+
+async function loadProducts() {
+	isCatalogLoading = true;
+	catalogError = null;
+	renderCatalog();
+
+	try {
+		const response = await fetch('api/products.php');
+		if (!response.ok) {
+			throw new Error(`Failed to load catalog (HTTP ${response.status})`);
+		}
+		const data = await response.json();
+		if (!data.success || !Array.isArray(data.products)) {
+			throw new Error(data.message || 'Invalid catalog response');
+		}
+		products = data.products;
+		if (window.kukiData) {
+			window.kukiData.products = products;
+		}
+		isCatalogLoading = false;
+		catalogError = null;
+		renderCatalog();
+	} catch (err) {
+		console.error('[KukiCakes] Catalog loading error:', err);
+		isCatalogLoading = false;
+		catalogError = 'Unable to connect to the cake catalog. Please try again.';
+		renderCatalog();
+	}
+}
+
+let _adminAccessAllowed = false;
+
+window.checkAdminSession = async function checkAdminSession() {
+	try {
+		const res = await fetch('api/admin-check.php', { credentials: 'same-origin' });
+		const json = await res.json();
+		return res.ok && (json.success === true) && (json.admin === true);
+	} catch {
+		return false;
+	}
+};
+
+window.allowAdminPage = function () {
+	_adminAccessAllowed = true;
+	goPage('admin');
+	if (typeof window.onAdminPageActivated === 'function') {
+		window.onAdminPageActivated();
+	}
+};
 
 function goPage(rawPage, preserveQuery = true) {
 	const raw = String(rawPage || '').replace(/^#/, '');
@@ -37,20 +109,61 @@ function goPage(rawPage, preserveQuery = true) {
 	if (page === 'account') page = 'profile';
 	const query = raw.includes('?') ? raw.slice(raw.indexOf('?')) : (preserveQuery && location.hash.includes('?') ? location.hash.slice(location.hash.indexOf('?')) : '');
 
+	// Protect admin page from unauthorized access
+	if (page === 'admin') {
+		if (!_adminAccessAllowed) {
+			if (typeof window.guardAdminRoute === 'function') {
+				window.guardAdminRoute();
+			} else {
+				window.checkAdminSession().then(isAdmin => {
+					if (isAdmin) {
+						window.allowAdminPage();
+					} else {
+						showToast('Please log in with an administrator account.');
+						goPage('login');
+					}
+				});
+			}
+			return;
+		}
+		_adminAccessAllowed = false;
+	}
+
 	document.querySelectorAll('.page').forEach(item => item.classList.toggle('active', item.id === `${page}-page`));
 	document.querySelectorAll('[data-page]').forEach(item => item.classList.toggle('active', item.dataset.page === page || item.dataset.page === targetRoute));
 	$('#navLinks').classList.remove('open');
 	if (page === 'cart') renderCart();
 	if (page === 'checkout') renderCheckout();
 	if (page === 'confirmation') renderConfirmation();
+	if (page === 'admin') {
+		if (typeof window.onAdminPageActivated === 'function') {
+			window.onAdminPageActivated();
+		}
+	}
 	window.scrollTo({ top: 0, behavior: 'smooth' });
 
 	const displayRoute = (targetRoute === 'account') ? 'account' : (targetRoute === 'forgot-password' ? 'login' : page);
 	history.replaceState(null, '', `#${displayRoute}${query}`);
 }
 
-function openProduct(id) {
+async function openProduct(id) {
+	if (!id) return;
 	activeProduct = products.find(product => product.id === id);
+	if (!activeProduct) {
+		try {
+			const resp = await fetch(`api/products.php?id=${id}`);
+			if (resp.ok) {
+				const data = await resp.json();
+				if (data.success && data.product) {
+					activeProduct = data.product;
+				}
+			}
+		} catch (_) {}
+	}
+	if (!activeProduct) {
+		showToast('Unable to open cake details.');
+		return;
+	}
 	$('#modalImage').src = activeProduct.img;
 	$('#modalTitle').textContent = activeProduct.name;
 	$('#modalDesc').textContent = activeProduct.desc;
@@ -62,7 +175,7 @@ function openProduct(id) {
 	if ($('#cakeFlavor')) $('#cakeFlavor').value = 'Not sure yet';
 	if ($('#specialNote')) $('#specialNote').value = '';
 	const flavorCategories = ['wedding', 'anniversary', 'birthday', 'cupcake', 'engagement', 'graduation', 'party', 'number'];
-	if ($('#flavorChoice')) $('#flavorChoice').hidden = !flavorCategories.some(category => activeProduct.cat.includes(category));
+	if ($('#flavorChoice')) $('#flavorChoice').hidden = !flavorCategories.some(category => (activeProduct.cat || '').includes(category));
 }
 
 function closeModal() { $('#productModal').classList.remove('open'); document.body.style.overflow = ''; }
@@ -113,6 +226,11 @@ function renderConfirmation() {
 function showToast(message) { const toast = $('#toast'); toast.textContent = message; toast.classList.add('show'); clearTimeout(window.toastTimer); window.toastTimer = setTimeout(() => toast.classList.remove('show'), 2800); }
 
 document.addEventListener('click', event => {
+	const retryBtn = event.target.closest('#retryCatalogBtn');
+	if (retryBtn) {
+		loadProducts();
+		return;
+	}
 	const pageLink = event.target.closest('[data-page]');
 	if (pageLink) {
 		event.preventDefault();
@@ -367,7 +485,7 @@ if ($('#priceSort')) $('#priceSort').onchange = renderAllProducts;
 document.querySelectorAll('.chips').forEach(group => group.onclick = event => { if (event.target.classList.contains('chip')) { group.querySelectorAll('.chip').forEach(chip => chip.classList.remove('active')); event.target.classList.add('active'); } });
 document.addEventListener('keydown', event => { if (event.key === 'Escape') closeModal(); });
 
-renderCatalog();
+loadProducts();
 saveCart();
 const _knownPages = ['cakes', 'gallery', 'cart', 'checkout', 'confirmation', 'admin', 'signup', 'login', 'profile', 'my-orders', 'auth-guard', 'reset-password', 'forgot-password', 'account'];
 const initialHash = location.hash.slice(1);

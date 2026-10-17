@@ -130,7 +130,9 @@
             if (data.authenticated && data.user) {
                 setDisplayCache(data.user);
                 updateNavbar(data.user);
-                syncCartOnLoad();
+                if (data.user.customer_id && !data.user.is_admin && data.user.role !== 'admin') {
+                    syncCartOnLoad();
+                }
             } else {
                 // Session gone — clear cache and show guest nav
                 clearDisplayCache();
@@ -195,13 +197,50 @@
     }
 
     /* ============================================================
-       PROTECTED PAGE GUARD
+       PROTECTED PAGE GUARD & ADMIN AUTHORIZATION
        Capture-phase intercept — runs before site.js bubble handler.
-       Redirect unauthenticated users to auth-guard.
+       Redirect unauthenticated users to auth-guard/login.
        Auth is verified via server session.
        ============================================================ */
 
-    const PROTECTED = ['profile', 'my-orders', 'account'];
+    const PROTECTED = ['profile', 'my-orders', 'account', 'admin'];
+    let _adminCheckPromise = null;
+
+    window.guardAdminRoute = async function guardAdminRoute() {
+        if (!_adminCheckPromise) {
+            _adminCheckPromise = apiGet('api/admin-check.php').finally(() => {
+                _adminCheckPromise = null;
+            });
+        }
+
+        try {
+            const res = await _adminCheckPromise;
+            if (res && res.success && res.admin) {
+                // Legitimate administrator — allow admin page display
+                if (typeof window.allowAdminPage === 'function') {
+                    window.allowAdminPage();
+                } else if (typeof goPage === 'function') {
+                    goPage('admin');
+                }
+                return;
+            }
+
+            if (res && res._status === 403) {
+                // Authenticated customer — forbidden from admin area
+                _toast('Access denied. Administrator privileges required.');
+                if (typeof goPage === 'function') goPage('home');
+                return;
+            }
+
+            // Unauthenticated guest (401 or not authenticated)
+            _toast('Please log in with an administrator account.');
+            if (typeof goPage === 'function') goPage('login');
+        } catch (err) {
+            console.warn('[KúkiCakes] Admin authorization check error:', err);
+            _toast('Access denied. Administrator privileges required.');
+            if (typeof goPage === 'function') goPage('home');
+        }
+    };
 
     document.addEventListener('click', async (e) => {
         const link = e.target.closest('[data-page]');
@@ -214,13 +253,21 @@
         e.stopImmediatePropagation();
         e.preventDefault();
 
+        if (page === 'admin') {
+            await window.guardAdminRoute();
+            return;
+        }
+
         try {
             const data = await apiGet('api/check-session.php');
-            if (!data.authenticated) {
+            if (!data.authenticated || !data.user || !data.user.customer_id || data.user.is_admin || data.user.role === 'admin') {
+                if (data.authenticated && (data.user?.is_admin || data.user?.role === 'admin')) {
+                    _toast('Please use a customer account to view this page.');
+                }
                 if (typeof goPage === 'function') goPage('auth-guard');
                 return;
             }
-            // Authenticated — navigate, then populate
+            // Authenticated customer — navigate, then populate
             if (typeof goPage === 'function') goPage(page);
             if (page === 'profile' || page === 'account') setTimeout(populateProfilePage, 30);
             if (page === 'my-orders')  setTimeout(() => renderOrdersPage('all'), 30);
@@ -249,7 +296,10 @@
 
             try {
                 const data = await apiGet('api/check-session.php');
-                if (!data.authenticated) {
+                if (!data.authenticated || !data.user || !data.user.customer_id || data.user.is_admin || data.user.role === 'admin') {
+                    if (data.authenticated && (data.user?.is_admin || data.user?.role === 'admin')) {
+                        _toast('Administrator accounts cannot place customer orders.');
+                    }
                     if (typeof goPage === 'function') goPage('auth-guard');
                 } else {
                     if (typeof goPage === 'function') goPage('checkout');
@@ -275,7 +325,7 @@
         _cartSyncTimer = setTimeout(async () => {
             try {
                 const session = await apiGet('api/check-session.php');
-                if (session && session.authenticated) {
+                if (session && session.authenticated && session.user && session.user.customer_id && !session.user.is_admin && session.user.role !== 'admin') {
                     await apiPost('api/cart.php', { action: 'save', items });
                 }
             } catch (err) {
@@ -633,22 +683,41 @@
             const submitBtn = document.getElementById('loginSubmitBtn');
             if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Logging in…'; }
 
+            const rawIdent = document.getElementById('li-email').value.trim();
             const payload = {
-                email:    document.getElementById('li-email').value.trim().toLowerCase(),
+                email:    rawIdent.toLowerCase(),
+                username: rawIdent,
                 password: document.getElementById('li-password').value,
             };
 
             try {
                 const data = await apiPost('api/login.php', payload);
 
-                if (data && data._status === 200 && data.success === true && data.user && data.user.customer_id) {
+                if (data && data._status === 200 && data.success === true && data.user) {
                     setDisplayCache(data.user);
                     updateNavbar(data.user);
-                    await mergeCartOnLogin();
-                    maybeShowCartMergeBanner(data.user.name.split(' ')[0]);
 
-                    if (typeof goPage === 'function') goPage('profile');
-                    setTimeout(populateProfilePage, 60);
+                    if (data.user.is_admin || data.user.role === 'admin') {
+                        // Administrator login: navigate directly to admin dashboard
+                        _toast(`Welcome back, ${data.user.name || 'Admin'}! 👋`);
+                        if (typeof window.allowAdminPage === 'function') {
+                            window.allowAdminPage();
+                        } else if (typeof goPage === 'function') {
+                            goPage('admin');
+                        }
+                    } else if (data.user.customer_id) {
+                        // Customer login: merge cart and go to profile
+                        await mergeCartOnLogin();
+                        maybeShowCartMergeBanner(data.user.name.split(' ')[0]);
+
+                        if (typeof goPage === 'function') goPage('profile');
+                        setTimeout(populateProfilePage, 60);
+                    } else {
+                        clearDisplayCache();
+                        updateNavbar(null);
+                        const errEl = document.getElementById('li-password-err');
+                        if (errEl) errEl.textContent = 'Invalid email or password.';
+                    }
                 } else {
                     // Failed login — clear any stale display cache and show guest nav
                     clearDisplayCache();
@@ -684,8 +753,10 @@
         let error = '';
 
         if (field === 'email') {
-            if (!val)           error = 'Email address is required.';
-            else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) error = 'Please enter a valid email address.';
+            if (!val)           error = 'Email address or username is required.';
+            else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val) && !/^[a-zA-Z0-9_.-]{3,50}$/.test(val)) {
+                error = 'Please enter a valid email address or username.';
+            }
         } else {
             if (!input.value)   error = 'Password is required.';
         }
@@ -1579,6 +1650,7 @@
         if (hash === 'profile' || hash === 'account') populateProfilePage();
         if (hash === 'forgot-password') setTimeout(showForgotPasswordForm, 100);
         if (hash.startsWith('reset-password')) setTimeout(checkResetPasswordState, 120);
+        if (hash === 'admin') window.guardAdminRoute();
 
         window.addEventListener('hashchange', () => {
             const h = location.hash.slice(1).split('?')[0].split('&')[0];
@@ -1590,6 +1662,8 @@
                 showLoginForm();
             } else if (h.startsWith('reset-password')) {
                 setTimeout(checkResetPasswordState, 50);
+            } else if (h === 'admin') {
+                window.guardAdminRoute();
             }
         });
     }

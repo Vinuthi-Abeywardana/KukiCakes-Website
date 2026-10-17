@@ -19,7 +19,7 @@ $customerId = requireAuth(); // exits with 401 if not logged in
 
 try {
     $stmt = $pdo->prepare(
-        'SELECT customer_id, full_name, email, phone_no, account_status, created_at
+        'SELECT customer_id, full_name, email, phone_no, role, account_status, created_at
          FROM `customer`
          WHERE customer_id = ?
          LIMIT 1'
@@ -46,6 +46,7 @@ respond([
         'name'        => $user['full_name'],
         'email'       => $user['email'],
         'phone'       => $user['phone_no'],
+        'role'        => (string) ($user['role'] ?? 'customer'),
         'joinDate'    => $joinDate,
         'status'      => $user['account_status'],
     ],

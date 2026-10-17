@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    const AUTH_PAGES = ['login', 'signup', 'profile', 'my-orders', 'auth-guard', 'reset-password'];
+    const AUTH_PAGES = ['login', 'signup', 'profile', 'my-orders', 'auth-guard', 'reset-password', 'admin'];
 
     // Holds any page the user tried to navigate to before components finished loading
     let _pendingPage = null;

@@ -116,8 +116,15 @@ if (empty($cartRows)) {
 }
 
 // 9 & 10. Recalculate price and quantity server-side using authoritative catalog
-$cakeStmt   = $pdo->prepare('SELECT cake_id, cake_name, price, availability FROM `cake` WHERE cake_id = ?');
+$cakeStmt   = $pdo->prepare('SELECT cake_id, cake_name, price, availability, stock_quantity FROM `cake` WHERE cake_id = ?');
 $flavorStmt = $pdo->prepare('SELECT flavor_id FROM `flavor` WHERE LOWER(flavor_name) = LOWER(?) LIMIT 1');
+
+// Pre-aggregate requested quantities by product_id across all cart rows
+$productQuantities = [];
+foreach ($cartRows as $row) {
+    $pid = (int) $row['product_id'];
+    $productQuantities[$pid] = ($productQuantities[$pid] ?? 0) + max(1, (int) $row['quantity']);
+}
 
 $subtotal = 0.00;
 $orderItemsToInsert = [];
@@ -138,7 +145,30 @@ foreach ($cartRows as $row) {
         respond([
             'success' => false,
             'message' => "Product '{$cake['cake_name']}' is currently out of stock.",
-        ], 400);
+            'cake_id' => (int) $cake['cake_id'],
+        ], 422);
+    }
+
+    // Phase 1: Validate requested quantities against tracked stock
+    if ($cake['stock_quantity'] !== null) {
+        $availableStock = (int) $cake['stock_quantity'];
+        $totalReq = $productQuantities[$productId] ?? max(1, (int) $row['quantity']);
+        if ($availableStock <= 0) {
+            respond([
+                'success' => false,
+                'message' => "Product '{$cake['cake_name']}' is currently out of stock.",
+                'cake_id' => (int) $cake['cake_id'],
+            ], 422);
+        }
+        if ($totalReq > $availableStock) {
+            respond([
+                'success'         => false,
+                'message'         => "Only {$availableStock} unit(s) of '{$cake['cake_name']}' available in stock (you requested {$totalReq}).",
+                'cake_id'         => (int) $cake['cake_id'],
+                'available_stock' => $availableStock,
+                'requested_qty'   => $totalReq,
+            ], 422);
+        }
     }
 
     $qty = max(1, (int) $row['quantity']);
@@ -208,6 +238,37 @@ try {
 // 14, 15 & 16. Database Transaction: insert order and all order items
 try {
     $pdo->beginTransaction();
+
+    // Early validation inside transaction: verify stock has not depleted since cart calculation
+    $stockCheckStmt = $pdo->prepare('SELECT cake_name, availability, stock_quantity FROM `cake` WHERE cake_id = ?');
+    foreach ($productQuantities as $pid => $reqQty) {
+        $stockCheckStmt->execute([$pid]);
+        $chkCake = $stockCheckStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$chkCake || (int)$chkCake['availability'] === 0) {
+            $pdo->rollBack();
+            respond([
+                'success' => false,
+                'message' => "Product is currently out of stock.",
+            ], 422);
+        }
+        if ($chkCake['stock_quantity'] !== null) {
+            $avail = (int) $chkCake['stock_quantity'];
+            if ($avail <= 0) {
+                $pdo->rollBack();
+                respond([
+                    'success' => false,
+                    'message' => "Product '{$chkCake['cake_name']}' is currently out of stock.",
+                ], 422);
+            }
+            if ($reqQty > $avail) {
+                $pdo->rollBack();
+                respond([
+                    'success' => false,
+                    'message' => "Only {$avail} unit(s) of '{$chkCake['cake_name']}' available in stock (you requested {$reqQty}).",
+                ], 422);
+            }
+        }
+    }
 
     // 14. Insert order record
     $orderInsert = $pdo->prepare('
@@ -334,7 +395,7 @@ try {
             'merchant_id'      => PAYHERE_MERCHANT_ID,
             'return_url'       => $baseAppUrl . '/#confirmation',
             'cancel_url'       => $baseAppUrl . '/#checkout',
-            'notify_url'       => $baseAppUrl . '/api/payhere-notify.php',
+            'notify_url'       => payhere_get_notify_url($baseAppUrl),
             'order_id'         => $orderNumber,
             'items'            => 'KúkiCakes Order ' . $orderNumber,
             'amount'           => number_format($total, 2, '.', ''),

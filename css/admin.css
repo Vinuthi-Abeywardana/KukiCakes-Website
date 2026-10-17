@@ -1,0 +1,562 @@
+/* ================================================================
+   KúkiCakes — Administrator Dashboard Styles (css/admin.css)
+   Preserves visual theme, tokens, and typography from KúkiCakes.
+   ================================================================ */
+
+/* --- Admin Views Switching --- */
+.admin-view {
+    display: none;
+    animation: fade .25s ease;
+}
+
+.admin-view.active {
+    display: block;
+}
+
+/* --- Admin Navigation Tabs --- */
+.admin-menu button.active {
+    background: #463632;
+    color: #fff;
+    font-weight: 600;
+}
+
+.admin-exit-btn {
+    margin-top: 30px;
+    opacity: 0.8;
+}
+
+.admin-exit-btn:hover {
+    opacity: 1;
+}
+
+/* --- Header Controls & Subtext --- */
+.admin-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* --- Filter Bars --- */
+.admin-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    margin: 20px 0 15px;
+}
+
+.admin-filter-input,
+.admin-filter-select {
+    padding: 9px 13px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    font-size: 13px;
+    background: #fff;
+    color: var(--ink);
+    outline: none;
+    transition: border-color .2s;
+}
+
+.admin-filter-input:focus,
+.admin-filter-select:focus {
+    border-color: var(--berry);
+}
+
+.admin-filter-search {
+    flex: 1;
+    min-width: 220px;
+}
+
+/* --- Filter Chips / Quick Counts --- */
+.admin-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.admin-chip {
+    border: 1px solid var(--line);
+    background: #fff;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: .2s;
+    user-select: none;
+}
+
+.admin-chip:hover,
+.admin-chip.active {
+    background: var(--ink);
+    color: #fff;
+    border-color: var(--ink);
+}
+
+.admin-chip b {
+    margin-left: 4px;
+    font-weight: 700;
+}
+
+/* --- Responsive Table Wrap --- */
+.admin-table-wrap {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow-x: auto;
+    box-shadow: 0 4px 18px rgba(73, 42, 32, .04);
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 600px;
+}
+
+.admin-table th {
+    background: #faf6f4;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    padding: 13px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+    font-weight: 600;
+}
+
+.admin-table td {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+}
+
+.admin-table tr:last-child td {
+    border-bottom: 0;
+}
+
+.admin-table tr:hover td {
+    background: #fffdfb;
+}
+
+/* --- Table Cells & Items --- */
+.admin-item-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.admin-item-thumb {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    object-fit: cover;
+    background: #f7ede8;
+    flex-shrink: 0;
+}
+
+.admin-item-name {
+    font-weight: 600;
+    color: var(--ink);
+    display: block;
+}
+
+.admin-item-sub {
+    font-size: 11px;
+    color: var(--muted);
+    display: block;
+}
+
+/* --- Badges --- */
+.badge-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    text-transform: capitalize;
+}
+
+.badge-status.st-pending   { background: #fef3c7; color: #92400e; }
+.badge-status.st-confirmed { background: #dbeafe; color: #1e40af; }
+.badge-status.st-in_progress { background: #f3e8ff; color: #6b21a8; }
+.badge-status.st-ready     { background: #cffafe; color: #155e75; }
+.badge-status.st-delivered { background: #dcfce7; color: #166534; }
+.badge-status.st-cancelled { background: #fee2e2; color: #991b1b; }
+
+.badge-status.pay-paid     { background: #dcfce7; color: #166534; }
+.badge-status.pay-pending  { background: #fef3c7; color: #92400e; }
+.badge-status.pay-failed   { background: #fee2e2; color: #991b1b; }
+.badge-status.pay-cancelled{ background: #fee2e2; color: #991b1b; }
+.badge-status.pay-charged_back { background: #ffe4e6; color: #be123c; }
+
+.badge-status.stock-in       { background: #dcfce7; color: #166534; }
+.badge-status.stock-low      { background: #ffedd5; color: #9a3412; }
+.badge-status.stock-out      { background: #fee2e2; color: #991b1b; }
+.badge-status.stock-untracked{ background: #f1f0ee; color: #645e5a; }
+
+.badge-cat {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 8px;
+    background: #fbf0ec;
+    color: var(--berry);
+    font-size: 11px;
+    margin: 1px 2px;
+    font-weight: 500;
+}
+
+/* --- Table Action Buttons --- */
+.admin-action-btn {
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    padding: 5px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: .15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.admin-action-btn:hover {
+    background: #faf4f0;
+    border-color: var(--berry);
+    color: var(--berry);
+}
+
+.admin-action-btn.danger:hover {
+    background: #fff5f5;
+    border-color: #e53e3e;
+    color: #e53e3e;
+}
+
+.admin-action-btn.success:hover {
+    background: #f0fdf4;
+    border-color: #16a34a;
+    color: #16a34a;
+}
+
+.admin-btn-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* --- Quick Stock Adjust Controls --- */
+.stock-adjust-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-stock-step {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 6px;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    color: var(--ink);
+    transition: .15s;
+}
+
+.btn-stock-step:hover {
+    background: var(--peach);
+    border-color: var(--peach);
+}
+
+/* --- State Messages (Loading, Empty, Error) --- */
+.admin-state-box {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+}
+
+.admin-state-box .state-icon {
+    font-size: 36px;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.admin-state-box h4 {
+    font-size: 16px;
+    color: var(--ink);
+    margin: 0 0 6px;
+}
+
+.admin-state-box p {
+    font-size: 13px;
+    margin: 0 0 12px;
+}
+
+/* --- Status Summary Pills in Dashboard --- */
+.dash-breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.dash-status-item {
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fcfaf9;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.dash-status-item span {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: capitalize;
+}
+
+.dash-status-item b {
+    font-size: 14px;
+    color: var(--ink);
+}
+
+/* --- Modals for Admin --- */
+.admin-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1050;
+    background: rgba(35, 23, 20, .65);
+    backdrop-filter: blur(6px);
+    display: none;
+    place-items: center;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.admin-modal-overlay.open {
+    display: grid;
+    animation: fade .2s ease;
+}
+
+.admin-modal-box {
+    background: #fff;
+    border-radius: 20px;
+    width: min(720px, 100%);
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 25px 60px rgba(40, 20, 15, .25);
+    border: 1px solid var(--line);
+    padding: 28px;
+    position: relative;
+    animation: fade .25s ease;
+}
+
+.admin-modal-box.wide {
+    width: min(840px, 100%);
+}
+
+.admin-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 16px;
+    margin-bottom: 20px;
+}
+
+.admin-modal-header h3 {
+    font: 600 22px var(--serif);
+    margin: 0 0 4px;
+    color: var(--ink);
+}
+
+.admin-modal-header p {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0;
+}
+
+.admin-modal-close {
+    border: 0;
+    background: #f5eee9;
+    color: var(--ink);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    cursor: pointer;
+    transition: .15s;
+}
+
+.admin-modal-close:hover {
+    background: var(--peach);
+}
+
+/* --- Form Grids inside Modal --- */
+.admin-form-group {
+    margin-bottom: 16px;
+}
+
+.admin-form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--ink);
+}
+
+.admin-form-group small {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+}
+
+.admin-form-control {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    font-size: 13px;
+    background: #fff;
+    color: var(--ink);
+    outline: none;
+    transition: border-color .2s;
+}
+
+.admin-form-control:focus {
+    border-color: var(--berry);
+}
+
+.admin-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.admin-checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    max-height: 140px;
+    overflow-y: auto;
+    background: #faf8f7;
+}
+
+.admin-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ink);
+    cursor: pointer;
+}
+
+/* --- Order Details View Inside Modal --- */
+.order-detail-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    background: #faf6f4;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+    font-size: 12px;
+}
+
+.order-detail-meta-grid div strong {
+    display: block;
+    color: var(--ink);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    margin-bottom: 3px;
+}
+
+.order-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 12px;
+}
+
+.order-items-table th {
+    background: #f6efeb;
+    padding: 9px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.order-items-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+}
+
+.order-totals-summary {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    margin: 15px 0 20px;
+    font-size: 13px;
+}
+
+.order-totals-summary .grand-total {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--berry);
+    border-top: 1px solid var(--line);
+    padding-top: 6px;
+    margin-top: 4px;
+}
+
+.order-status-actions-box {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    align-items: end;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .admin-form-row {
+        grid-template-columns: 1fr;
+    }
+    .order-detail-meta-grid,
+    .order-status-actions-box,
+    .dash-breakdown-grid {
+        grid-template-columns: 1fr;
+    }
+    .admin-checkbox-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}

@@ -459,31 +459,7 @@
                 </div>
             </div>
         </div>
-        <div class="page" id="admin-page">
-            <div class="admin shell">
-                <div class="admin-shell">
-                    <aside class="admin-side">
-                        <div class="brand"><img class="brand-logo" src="docs/logo1_1.png" alt="KukiCakes"></div>
-                        <div class="admin-menu"><button class="active">▦ Dashboard</button><button>▤
-                                Orders</button><button>♢ Products</button></div>
-                    </aside>
-                    <div class="admin-main">
-                        <div class="admin-head">
-                            <div><small>Tuesday, 25 August</small>
-                                <h2>Good morning, Kuki.</h2>
-                            </div>
-                        </div>
-                        <div class="stat-grid">
-                            <div class="stat"><span>TOTAL ORDERS</span><b>125</b></div>
-                            <div class="stat"><span>UPCOMING</span><b>45</b></div>
-                            <div class="stat"><span>CUSTOMERS</span><b>230</b></div>
-                            <div class="stat"><span>REVENUE</span><b>Rs. 490K</b></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <!-- Auth pages injected here by auth-loader.js -->
+        <!-- Auth and Admin pages injected dynamically into #auth-pages by auth-loader.js -->
         <div id="auth-pages"></div>
     </main>
     <footer>
@@ -549,10 +525,11 @@
         aria-label="Chat with KukiCakes on WhatsApp" title="Chat on WhatsApp">
         <img src="https://cdn.simpleicons.org/whatsapp/ffffff" alt="">
     </a>
-    <script type="text/javascript" src="https://www.payhere.lk/lib/payhere.js"></script>
     <script src="js/data.js"></script>
     <script src="js/site.js"></script>
     <script src="js/auth-loader.js?v=2"></script>
+    <script src="js/admin.js"></script>
+    <script defer type="text/javascript" src="https://www.payhere.lk/lib/payhere.js"></script>
 </body>
 
 </html>

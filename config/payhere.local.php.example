@@ -1,0 +1,15 @@
+<?php
+/**
+ * KúkiCakes — Local PayHere Configuration Overrides (Example Template)
+ *
+ * Copy this file to `config/payhere.local.php` to set local environment overrides.
+ * `config/payhere.local.php` is ignored by Git and will NEVER be committed.
+ */
+
+// Optional: Public HTTPS notification base URL for PayHere Sandbox IPN testing
+// Set this to your active HTTPS tunnel URL (e.g. from ngrok or cloudflared)
+// When configured, this is used ONLY for the `notify_url` webhook.
+// Storefront, return_url, and cancel_url remain on localhost by default.
+//
+// Example:
+// define('PAYHERE_NOTIFY_BASE_URL', 'https://your-tunnel-subdomain.ngrok-free.app');

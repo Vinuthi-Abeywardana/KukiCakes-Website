@@ -14,15 +14,10 @@ header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 
-// ── Secure session configuration ──────────────────────────────
-// Must be called before session_start()
-ini_set('session.cookie_httponly', 1);      // No JS access to cookie
-ini_set('session.use_strict_mode', 1);      // Reject unknown session IDs
-ini_set('session.cookie_samesite', 'Lax');  // CSRF mitigation (Lax works with local HTTP)
-// Note: Secure flag requires HTTPS; on localhost HTTP we leave it off
-// ini_set('session.cookie_secure', 1);
-
 if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_httponly', 1);      // No JS access to cookie
+    ini_set('session.use_strict_mode', 1);      // Reject unknown session IDs
+    ini_set('session.cookie_samesite', 'Lax');  // CSRF mitigation (Lax works with local HTTP)
     session_name('KUKI_SESS');
     session_start();
 }
@@ -45,18 +40,46 @@ function respond(array $data, int $status = 200): never {
  * Check if current session has an authenticated customer.
  */
 function isAuthenticated(): bool {
-    return !empty($_SESSION['customer_id']);
+    return !empty($_SESSION['customer_id']) && (($_SESSION['role'] ?? 'customer') === 'customer');
 }
 
 /**
  * Return the authenticated customer_id from the session,
- * or respond with 401 and exit if not authenticated.
+ * or respond with 401/403 and exit if not authenticated as a customer.
  */
 function requireAuth(): int {
     if (empty($_SESSION['customer_id'])) {
+        if (!empty($_SESSION['admin_id']) || (isset($_SESSION['role']) && $_SESSION['role'] === 'admin')) {
+            respond(['success' => false, 'message' => 'Access denied. Customer account required.'], 403);
+        }
         respond(['success' => false, 'message' => 'Authentication required.'], 401);
     }
+    if (isset($_SESSION['role']) && $_SESSION['role'] !== 'customer') {
+        respond(['success' => false, 'message' => 'Access denied. Customer account required.'], 403);
+    }
     return (int) $_SESSION['customer_id'];
+}
+
+/**
+ * Check if current session has an authenticated administrator.
+ */
+function isAdmin(): bool {
+    return !empty($_SESSION['admin_id']) && (isset($_SESSION['role']) && $_SESSION['role'] === 'admin');
+}
+
+/**
+ * Enforce administrator access control.
+ * Responds with 401 if unauthenticated, 403 if authenticated but not an admin.
+ * Returns the verified administrator ID.
+ */
+function requireAdmin(): int {
+    if (empty($_SESSION['admin_id']) && empty($_SESSION['customer_id'])) {
+        respond(['success' => false, 'message' => 'Authentication required.'], 401);
+    }
+    if (empty($_SESSION['admin_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+        respond(['success' => false, 'message' => 'Access denied. Administrator privileges required.'], 403);
+    }
+    return (int) $_SESSION['admin_id'];
 }
 
 /**

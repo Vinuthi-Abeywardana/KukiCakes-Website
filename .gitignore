@@ -1,0 +1,7 @@
+# Local environment configuration (contains sensitive tokens / temporary tunnel URLs)
+config/payhere.local.php
+.env
+
+# Backup and temporary files
+*.bak
+*.task*.bak

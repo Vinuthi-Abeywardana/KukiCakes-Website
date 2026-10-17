@@ -44,13 +44,13 @@ $input = $_POST;
 if (empty($input)) {
     $raw = file_get_contents('php://input');
     if ($raw) {
-        parse_str($raw, $parsed);
-        if (!empty($parsed)) {
-            $input = $parsed;
+        $json = json_decode($raw, true);
+        if (is_array($json)) {
+            $input = $json;
         } else {
-            $json = json_decode($raw, true);
-            if (is_array($json)) {
-                $input = $json;
+            parse_str($raw, $parsed);
+            if (!empty($parsed)) {
+                $input = $parsed;
             }
         }
     }
@@ -86,7 +86,7 @@ if (!payhere_verify_signature(PAYHERE_MERCHANT_ID, $orderId, $payhereAmount, $pa
 // 4. Identify the order in the database (by unique order_number or primary order_id)
 try {
     $stmt = $pdo->prepare('
-        SELECT order_id, order_number, customer_id, total, payment_status, order_status, payhere_payment_id
+        SELECT order_id, order_number, customer_id, total, payment_status, order_status, payhere_payment_id, special_instructions
         FROM `orders`
         WHERE order_number = :order_num OR (order_id = :order_id AND :is_num REGEXP "^[0-9]+$")
         LIMIT 1
@@ -169,32 +169,156 @@ switch ($statusCode) {
         break;
 }
 
-// 8. Update order in database
+// 8. Update order and allocate stock in a database transaction with pessimistic locking
 try {
+    $pdo->beginTransaction();
+
+    // 8a. Pessimistic row-level lock on the order to prevent concurrent webhook race conditions
+    $lockStmt = $pdo->prepare('
+        SELECT payment_status, order_status, payhere_payment_id, special_instructions 
+        FROM `orders` 
+        WHERE order_id = :order_id 
+        FOR UPDATE
+    ');
+    $lockStmt->execute([':order_id' => $order['order_id']]);
+    $lockedOrder = $lockStmt->fetch(PDO::FETCH_ASSOC);
+
+    // Concurrency guard: If a concurrent notification already completed and marked it paid
+    if ($lockedOrder && $lockedOrder['payment_status'] === 'paid' && $statusCode === '2') {
+        $pdo->commit();
+        ipnRespond([
+            'success'        => true,
+            'message'        => 'Notification already processed. Order is already marked as paid.',
+            'order_number'   => $order['order_number'],
+            'payment_status' => 'paid',
+        ], 200);
+    }
+
+    $finalPaymentStatus = $newPaymentStatus;
+    $finalOrderStatus   = $newOrderStatus;
+    $finalInstructions  = $lockedOrder['special_instructions'] ?? $order['special_instructions'] ?? null;
+    $shortageOccurred   = false;
+
+    // Deduct stock ONLY on verified successful payment (statusCode === '2')
+    // and only if the order was not already marked as paid before this transaction
+    if ($statusCode === '2' && (!$lockedOrder || $lockedOrder['payment_status'] !== 'paid')) {
+        // Query distinct order items aggregated by cake_id in strictly ascending order (deadlock prevention)
+        $itemsStmt = $pdo->prepare('
+            SELECT cake_id, SUM(quantity) AS total_qty 
+            FROM `order_item` 
+            WHERE order_id = :order_id AND cake_id IS NOT NULL
+            GROUP BY cake_id
+            ORDER BY cake_id ASC
+        ');
+        $itemsStmt->execute([':order_id' => $order['order_id']]);
+        $orderItems = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Lock all distinct cake rows in strictly ascending order and verify stock availability
+        $cakeLockStmt = $pdo->prepare('
+            SELECT cake_id, cake_name, stock_quantity 
+            FROM `cake` 
+            WHERE cake_id = :cake_id 
+            FOR UPDATE
+        ');
+
+        $allTrackedSufficient = true;
+        $shortages = [];
+        $cakesToDeduct = [];
+
+        foreach ($orderItems as $item) {
+            $cid = (int) $item['cake_id'];
+            $reqQty = (int) $item['total_qty'];
+
+            $cakeLockStmt->execute([':cake_id' => $cid]);
+            $cakeRow = $cakeLockStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$cakeRow) {
+                $allTrackedSufficient = false;
+                $shortages[] = "Product #{$cid} not found in catalog";
+                break;
+            }
+
+            // Untracked items (stock_quantity IS NULL) are ignored for inventory counts
+            if ($cakeRow['stock_quantity'] !== null) {
+                $currentStock = (int) $cakeRow['stock_quantity'];
+                if ($currentStock < $reqQty) {
+                    $allTrackedSufficient = false;
+                    $shortages[] = "'{$cakeRow['cake_name']}' (available: {$currentStock}, requested: {$reqQty})";
+                } else {
+                    $cakesToDeduct[] = [
+                        'cake_id'  => $cid,
+                        'quantity' => $reqQty,
+                    ];
+                }
+            }
+        }
+
+        if ($allTrackedSufficient) {
+            // All items have sufficient stock: deduct conditionally for each item
+            $stockStmt = $pdo->prepare('
+                UPDATE `cake` 
+                SET stock_quantity = stock_quantity - :qty
+                WHERE cake_id = :cake_id AND stock_quantity IS NOT NULL AND stock_quantity >= :min_qty
+            ');
+            foreach ($cakesToDeduct as $deductItem) {
+                $stockStmt->execute([
+                    ':qty'     => (int) $deductItem['quantity'],
+                    ':min_qty' => (int) $deductItem['quantity'],
+                    ':cake_id' => (int) $deductItem['cake_id'],
+                ]);
+            }
+            $finalOrderStatus = ($order['order_status'] === 'pending' ? 'confirmed' : $order['order_status']);
+        } else {
+            // INVENTORY SHORTAGE: Do NOT deduct partial stock. Record payment, but hold order out of normal fulfillment
+            $shortageOccurred = true;
+            $finalOrderStatus = 'pending'; // Remain pending instead of confirmed for administrative resolution
+            
+            $shortageAlert = '[INVENTORY SHORTAGE ALERT: Paid LKR ' . number_format($receivedAmount, 2, '.', '') . 
+                ' via PayHere Ref #' . ($paymentId !== '' ? $paymentId : 'N/A') . ' on ' . date('Y-m-d H:i:s') . 
+                ' but stock was depleted: ' . implode(', ', $shortages) . 
+                '. Stock was NOT deducted; order held in pending status for administrative resolution.]';
+            $existingNotes = trim((string) ($finalInstructions ?? ''));
+            $finalInstructions = $existingNotes !== '' ? $shortageAlert . "\n" . $existingNotes : $shortageAlert;
+            
+            error_log("[PayHere IPN] Stock shortage for order {$order['order_number']}: " . implode('; ', $shortages));
+        }
+    }
+
     $updateStmt = $pdo->prepare('
         UPDATE `orders`
-        SET payment_status     = :payment_status,
-            order_status       = :order_status,
-            payhere_payment_id = :payhere_payment_id
+        SET payment_status       = :payment_status,
+            order_status         = :order_status,
+            payhere_payment_id   = :payhere_payment_id,
+            special_instructions = :special_instructions
         WHERE order_id = :order_id
     ');
     $updateStmt->execute([
-        ':payment_status'     => $newPaymentStatus,
-        ':order_status'       => $newOrderStatus,
-        ':payhere_payment_id' => $paymentId !== '' ? $paymentId : $order['payhere_payment_id'],
-        ':order_id'           => $order['order_id'],
+        ':payment_status'       => $finalPaymentStatus,
+        ':order_status'         => $finalOrderStatus,
+        ':payhere_payment_id'   => $paymentId !== '' ? $paymentId : ($lockedOrder['payhere_payment_id'] ?? $order['payhere_payment_id']),
+        ':special_instructions' => $finalInstructions,
+        ':order_id'             => $order['order_id'],
     ]);
+
+    $pdo->commit();
 
     ipnRespond([
         'success'            => true,
-        'message'            => 'Payment notification processed successfully.',
+        'message'            => $shortageOccurred 
+            ? 'Payment recorded. Order flagged for administrative resolution due to inventory shortage.' 
+            : 'Payment notification processed successfully.',
         'order_number'       => $order['order_number'],
-        'payment_status'     => $newPaymentStatus,
-        'order_status'       => $newOrderStatus,
-        'payhere_payment_id' => $paymentId !== '' ? $paymentId : $order['payhere_payment_id'],
+        'payment_status'     => $finalPaymentStatus,
+        'order_status'       => $finalOrderStatus,
+        'payhere_payment_id' => $paymentId !== '' ? $paymentId : ($lockedOrder['payhere_payment_id'] ?? $order['payhere_payment_id']),
+        'shortage'           => $shortageOccurred,
     ], 200);
 
 } catch (PDOException $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     error_log('[PayHere IPN] Database update error: ' . $e->getMessage());
     ipnRespond(['success' => false, 'message' => 'Failed to update order status.'], 500);
 }
+

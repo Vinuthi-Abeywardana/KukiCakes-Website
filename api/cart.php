@@ -27,6 +27,10 @@ if ($method !== 'GET' && $method !== 'POST') {
 // GET: Retrieve authenticated customer's cart
 // ─────────────────────────────────────────────────────────────
 if ($method === 'GET') {
+    if (isAdmin()) {
+        respond(['success' => false, 'message' => 'Access denied. Customer account required.'], 403);
+    }
+
     if (!isAuthenticated()) {
         respond([
             'success'       => true,
