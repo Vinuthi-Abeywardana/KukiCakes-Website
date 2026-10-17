@@ -1,5 +1,5 @@
 const gallery = (window.kukiData && Array.isArray(window.kukiData.gallery)) ? window.kukiData.gallery : [];
-let products = [];
+let products = (window.kukiData && Array.isArray(window.kukiData.products)) ? window.kukiData.products : [];
 let isCatalogLoading = false;
 let catalogError = null;
 let cart = JSON.parse(localStorage.getItem('kukiCart') || '[]');
@@ -8,17 +8,69 @@ let searchTerm = '';
 const money = value => `Rs. ${value.toLocaleString()}`;
 const $ = selector => document.querySelector(selector);
 
+function escapeHtml(str) {
+	if (str == null) return '';
+	return String(str).replace(/[&<>"']/g, ch => ({
+		'&': '&amp;',
+		'<': '&lt;',
+		'>': '&gt;',
+		'"': '&quot;',
+		"'": '&#39;'
+	}[ch] || ch));
+}
+
 function productCard(product) {
-	return `<article class="product-card" data-cat="${product.cat}"><div class="product-img" data-product="${product.id}"><img src="${product.img}" alt="${product.name}"><span class="badge">${product.badge}</span></div><div class="product-info"><h3>${product.name}</h3><div class="product-meta"><span>From</span><span class="price">${money(product.price)}</span></div><button class="add-btn" data-product="${product.id}">Choose this cake</button></div></article>`;
+	return `<article class="product-card" data-cat="${escapeHtml(product.cat || '')}"><div class="product-img" data-product="${product.id}"><img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)}"><span class="badge">${escapeHtml(product.badge || '')}</span></div><div class="product-info"><h3>${escapeHtml(product.name)}</h3><div class="product-meta"><span>From</span><span class="price">${money(product.price)}</span></div><button class="add-btn" data-product="${product.id}">Choose this cake</button></div></article>`;
+}
+
+function galleryCard(product) {
+	const catStr = escapeHtml(product.cat || '');
+	const nameStr = escapeHtml(product.name || 'Signature Cake');
+	const imgStr = escapeHtml(product.img || '');
+	const badgeStr = product.badge ? `<span class="badge gallery-badge">${escapeHtml(product.badge)}</span>` : '';
+	return `<article class="gallery-item" data-product="${product.id}" data-cat="${catStr}" tabindex="0" role="button" aria-label="View ${nameStr} details">` +
+		`<img src="${imgStr}" alt="${nameStr}" loading="lazy" onerror="this.onerror=null;this.style.opacity='0.6';">` +
+		badgeStr +
+		`<div class="gallery-overlay">` +
+			`<b>${nameStr}</b>` +
+			`<div class="gallery-overlay-meta">` +
+				`<span>From</span>` +
+				`<span class="gallery-price">${money(product.price)}</span>` +
+			`</div>` +
+			`<span class="gallery-cta">Choose this cake →</span>` +
+		`</div>` +
+	`</article>`;
+}
+
+function renderGallery() {
+	const grid = $('#galleryGrid');
+	if (!grid) return;
+
+	if (isCatalogLoading && (!products || products.length === 0)) {
+		grid.innerHTML = '<div class="search-empty catalog-loading" style="grid-column: 1 / -1;"><div style="font-size:32px;margin-bottom:8px">🧁</div><h3>Loading our sweet gallery...</h3><p>Connecting to our bakery catalog.</p></div>';
+		return;
+	}
+
+	if (catalogError && (!products || products.length === 0)) {
+		grid.innerHTML = `<div class="search-empty catalog-error" style="grid-column: 1 / -1;"><div style="font-size:32px;margin-bottom:8px">⚠️</div><h3>Unable to load gallery</h3><p>${escapeHtml(catalogError)}</p><button type="button" class="btn btn-primary" id="retryGalleryBtn" style="margin-top:14px">Try again</button></div>`;
+		return;
+	}
+
+	if (!products || products.length === 0) {
+		grid.innerHTML = '<div class="search-empty" style="grid-column: 1 / -1;"><h3>No cakes found</h3><p>Our gallery is currently empty.</p></div>';
+		return;
+	}
+
+	grid.innerHTML = products.map(galleryCard).join('');
 }
 
 function renderAllProducts() {
-	if (isCatalogLoading) {
+	if (isCatalogLoading && (!products || products.length === 0)) {
 		if ($('#allProducts')) $('#allProducts').innerHTML = '<div class="search-empty catalog-loading"><div style="font-size:32px;margin-bottom:8px">🧁</div><h3>Loading our fresh cakes...</h3><p>Connecting to our bakery catalog.</p></div>';
 		return;
 	}
-	if (catalogError) {
-		if ($('#allProducts')) $('#allProducts').innerHTML = `<div class="search-empty catalog-error"><div style="font-size:32px;margin-bottom:8px">⚠️</div><h3>Unable to load cakes</h3><p>${catalogError}</p><button type="button" class="btn btn-primary" id="retryCatalogBtn" style="margin-top:14px">Try again</button></div>`;
+	if (catalogError && (!products || products.length === 0)) {
+		if ($('#allProducts')) $('#allProducts').innerHTML = `<div class="search-empty catalog-error"><div style="font-size:32px;margin-bottom:8px">⚠️</div><h3>Unable to load cakes</h3><p>${escapeHtml(catalogError)}</p><button type="button" class="btn btn-primary" id="retryCatalogBtn" style="margin-top:14px">Try again</button></div>`;
 		return;
 	}
 	const activeFilter = document.querySelector('.filter.active')?.dataset.filter || 'all';
@@ -37,20 +89,95 @@ function renderAllProducts() {
 }
 
 function renderCatalog() {
-	if (isCatalogLoading) {
+	if (isCatalogLoading && (!products || products.length === 0)) {
 		const loadingHtml = '<div class="search-empty catalog-loading"><div style="font-size:32px;margin-bottom:8px">🧁</div><h3>Loading our fresh cakes...</h3><p>Connecting to our bakery catalog.</p></div>';
 		if ($('#featuredProducts')) $('#featuredProducts').innerHTML = loadingHtml;
 		if ($('#allProducts')) $('#allProducts').innerHTML = loadingHtml;
-	} else if (catalogError) {
-		const errorHtml = `<div class="search-empty catalog-error"><div style="font-size:32px;margin-bottom:8px">⚠️</div><h3>Unable to load cakes</h3><p>${catalogError}</p><button type="button" class="btn btn-primary" id="retryCatalogBtn" style="margin-top:14px">Try again</button></div>`;
+	} else if (catalogError && (!products || products.length === 0)) {
+		const errorHtml = `<div class="search-empty catalog-error"><div style="font-size:32px;margin-bottom:8px">⚠️</div><h3>Unable to load cakes</h3><p>${escapeHtml(catalogError)}</p><button type="button" class="btn btn-primary" id="retryCatalogBtn" style="margin-top:14px">Try again</button></div>`;
 		if ($('#featuredProducts')) $('#featuredProducts').innerHTML = errorHtml;
 		if ($('#allProducts')) $('#allProducts').innerHTML = errorHtml;
 	} else {
 		if ($('#featuredProducts')) $('#featuredProducts').innerHTML = products.slice(0, 4).map(productCard).join('');
 		renderAllProducts();
 	}
-	if ($('#galleryGrid')) $('#galleryGrid').innerHTML = gallery.map(item => `<article class="gallery-item"><img src="${item.img}" alt="${item.title}"><div class="gallery-overlay"><b>${item.title}</b></div></article>`).join('');
+	renderGallery();
 }
+
+/**
+ * Randomize product display order for the storefront catalogue while keeping it
+ * completely stable across re-renders, category filtering, search, and page navigation.
+ * Generates a fresh randomized order for each new visit/session.
+ */
+function applyVisitCatalogOrder(rawProducts) {
+	if (!Array.isArray(rawProducts) || rawProducts.length <= 1) {
+		return rawProducts;
+	}
+
+	const storageKey = 'kuki_visit_catalog_order';
+	let storedOrder = null;
+
+	try {
+		const saved = sessionStorage.getItem(storageKey);
+		if (saved) {
+			const parsed = JSON.parse(saved);
+			if (Array.isArray(parsed) && parsed.length > 0) {
+				storedOrder = parsed;
+			}
+		}
+	} catch (_) {
+		// sessionStorage may be blocked or restricted; handle gracefully
+	}
+
+	// Map products by ID for fast, deterministic re-ordering
+	const productMap = new Map();
+	for (const p of rawProducts) {
+		productMap.set(p.id, p);
+	}
+
+	// If we have an existing visit order, apply it consistently
+	if (storedOrder) {
+		const ordered = [];
+		for (const id of storedOrder) {
+			if (productMap.has(id)) {
+				ordered.push(productMap.get(id));
+				productMap.delete(id);
+			}
+		}
+		// Append any newly added products that were not in the stored session order
+		for (const remaining of productMap.values()) {
+			ordered.push(remaining);
+		}
+
+		if (ordered.length === rawProducts.length) {
+			return ordered;
+		}
+	}
+
+	// Fresh visit: produce an unbiased randomized order using Fisher-Yates shuffle
+	const shuffled = [...rawProducts];
+	for (let i = shuffled.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		const temp = shuffled[i];
+		shuffled[i] = shuffled[j];
+		shuffled[j] = temp;
+	}
+
+	try {
+		sessionStorage.setItem(storageKey, JSON.stringify(shuffled.map(p => p.id)));
+	} catch (_) {
+		// Ignore storage quota or security errors
+	}
+
+	return shuffled;
+}
+
+window.reshuffleCatalog = function reshuffleCatalog() {
+	try {
+		sessionStorage.removeItem('kuki_visit_catalog_order');
+	} catch (_) {}
+	loadProducts();
+};
 
 async function loadProducts() {
 	isCatalogLoading = true;
@@ -66,7 +193,7 @@ async function loadProducts() {
 		if (!data.success || !Array.isArray(data.products)) {
 			throw new Error(data.message || 'Invalid catalog response');
 		}
-		products = data.products;
+		products = applyVisitCatalogOrder(data.products);
 		if (window.kukiData) {
 			window.kukiData.products = products;
 		}
@@ -132,6 +259,7 @@ function goPage(rawPage, preserveQuery = true) {
 	document.querySelectorAll('.page').forEach(item => item.classList.toggle('active', item.id === `${page}-page`));
 	document.querySelectorAll('[data-page]').forEach(item => item.classList.toggle('active', item.dataset.page === page || item.dataset.page === targetRoute));
 	$('#navLinks').classList.remove('open');
+	if (page === 'gallery') renderGallery();
 	if (page === 'cart') renderCart();
 	if (page === 'checkout') renderCheckout();
 	if (page === 'confirmation') renderConfirmation();
@@ -226,7 +354,7 @@ function renderConfirmation() {
 function showToast(message) { const toast = $('#toast'); toast.textContent = message; toast.classList.add('show'); clearTimeout(window.toastTimer); window.toastTimer = setTimeout(() => toast.classList.remove('show'), 2800); }
 
 document.addEventListener('click', event => {
-	const retryBtn = event.target.closest('#retryCatalogBtn');
+	const retryBtn = event.target.closest('#retryCatalogBtn, #retryGalleryBtn');
 	if (retryBtn) {
 		loadProducts();
 		return;
@@ -483,7 +611,16 @@ if ($('#newsletter')) $('#newsletter').onsubmit = event => { event.preventDefaul
 document.querySelectorAll('.filter[data-filter]').forEach(button => button.onclick = () => { document.querySelectorAll('.filter[data-filter]').forEach(item => item.classList.remove('active')); button.classList.add('active'); renderAllProducts(); });
 if ($('#priceSort')) $('#priceSort').onchange = renderAllProducts;
 document.querySelectorAll('.chips').forEach(group => group.onclick = event => { if (event.target.classList.contains('chip')) { group.querySelectorAll('.chip').forEach(chip => chip.classList.remove('active')); event.target.classList.add('active'); } });
-document.addEventListener('keydown', event => { if (event.key === 'Escape') closeModal(); });
+document.addEventListener('keydown', event => {
+	if (event.key === 'Escape') closeModal();
+	if (event.key === 'Enter' || event.key === ' ') {
+		const targetProduct = event.target.closest('.gallery-item[data-product]');
+		if (targetProduct) {
+			event.preventDefault();
+			openProduct(Number(targetProduct.dataset.product));
+		}
+	}
+});
 
 loadProducts();
 saveCart();
