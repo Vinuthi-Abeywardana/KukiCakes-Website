@@ -67,9 +67,18 @@ if ($deliveryDate === '') {
     if (!$d || $d->format('Y-m-d') !== $deliveryDate) {
         $errors['delivery_date'] = 'Delivery date must be in YYYY-MM-DD format.';
     } else {
-        $today = (new DateTime('today', new DateTimeZone('Asia/Colombo')))->format('Y-m-d');
-        if ($deliveryDate < $today) {
+        $tzColombo = new DateTimeZone('Asia/Colombo');
+        $todayColombo = new DateTime('today', $tzColombo);
+        $todayStr = $todayColombo->format('Y-m-d');
+        if ($deliveryDate < $todayStr) {
             $errors['delivery_date'] = 'Delivery date cannot be in the past.';
+        } else {
+            $minDelivery = (clone $todayColombo)->modify('+2 days');
+            $minDeliveryStr = $minDelivery->format('Y-m-d');
+            if ($deliveryDate < $minDeliveryStr) {
+                $minDateFormatted = $minDelivery->format('d/m/Y');
+                $errors['delivery_date'] = "Orders require at least 48 hours advance notice (earliest available: {$minDateFormatted}).";
+            }
         }
     }
 }
@@ -193,7 +202,7 @@ foreach ($cartRows as $row) {
         'cake_name'    => (string) $cake['cake_name'],
         'unit_price'   => $unitPrice,
         'quantity'     => $qty,
-        'weight'       => !empty($row['weight']) ? substr(trim((string) $row['weight']), 0, 20) : '500g',
+        'weight'       => !empty($row['weight']) ? substr(trim((string) $row['weight']), 0, 100) : 'Standard',
         'special_note' => !empty($row['note']) ? trim((string) $row['note']) : null,
     ];
 }

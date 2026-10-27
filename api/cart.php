@@ -60,7 +60,7 @@ if ($method === 'GET') {
             // Ensure core fields match DB values
             $item['id']     = (int) $row['product_id'];
             $item['qty']    = (int) $row['quantity'];
-            $item['weight'] = (string) ($row['weight'] ?: '500g');
+            $item['weight'] = (string) ($row['weight'] ?: 'Standard');
             $item['flavor'] = (string) ($row['flavor'] ?: '');
             $item['note']   = (string) ($row['note'] ?: '');
 
@@ -100,7 +100,7 @@ function sanitizeCartItem($raw) {
     if (!is_array($raw) || empty($raw['id'])) return null;
     $id     = (int) $raw['id'];
     $qty    = max(1, (int) ($raw['qty'] ?? 1));
-    $weight = trim((string) ($raw['weight'] ?? '500g')) ?: '500g';
+    $weight = trim((string) ($raw['weight'] ?? 'Standard')) ?: 'Standard';
     $flavor = trim((string) ($raw['flavor'] ?? ''));
     $note   = trim((string) ($raw['note'] ?? ''));
 
@@ -138,7 +138,7 @@ if ($action === 'merge') {
             $item = !empty($row['item_data']) ? (json_decode($row['item_data'], true) ?: []) : [];
             $item['id']     = (int) $row['product_id'];
             $item['qty']    = (int) $row['quantity'];
-            $item['weight'] = (string) ($row['weight'] ?: '500g');
+            $item['weight'] = (string) ($row['weight'] ?: 'Standard');
             $item['flavor'] = (string) ($row['flavor'] ?: '');
             $item['note']   = (string) ($row['note'] ?: '');
             $merged[] = $item;

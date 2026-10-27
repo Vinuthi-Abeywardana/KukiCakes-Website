@@ -1,0 +1,9 @@
+# KúkiCakes — Protect Database Directory
+# Deny all direct HTTP/web access to database schema, migrations, and backups
+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Deny from all
+</IfModule>

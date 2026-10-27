@@ -119,7 +119,16 @@
     }
 
     .menu-btn {
-        display: grid
+        display: grid;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .icon-btn {
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
     }
 
     .nav-order {
@@ -446,13 +455,15 @@
     }
 
     .nav-actions {
-        gap: 6px
+        gap: 8px;
     }
 
-    .icon-btn {
-        height: 38px;
-        min-width: 38px;
-        padding: 0 9px
+    .icon-btn,
+    .menu-btn {
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0 10px;
     }
 }
 

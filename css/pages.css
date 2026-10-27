@@ -819,7 +819,18 @@ footer {
     border: 1px solid var(--line);
     border-radius: 11px;
     background: #fff;
-    font-size: 12px
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color .18s, background .18s;
+}
+
+.payment-option:hover {
+    border-color: #e5aaa0;
+}
+
+.payment-option:focus-within {
+    outline: 2px solid var(--berry);
+    outline-offset: 1px;
 }
 
 .payment-option:has(input:checked) {

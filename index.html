@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#fff9f5" />
-    <title>KukiCakes � Cakes made for your moments</title>
+    <title>KúkiCakes — Cakes made for your moments</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -182,6 +182,11 @@
                     </div>
                     <form class="order-form quote-form" id="quoteForm">
                         <h3 class="form-title">Start your custom order</h3>
+                        <!-- Honeypot anti-spam field (hidden from human visitors) -->
+                        <div class="hp-field" style="display:none !important; visibility:hidden; position:absolute; left:-9999px;" aria-hidden="true">
+                            <label for="cake_special_code">Leave this field blank</label>
+                            <input type="text" id="cake_special_code" name="cake_special_code" tabindex="-1" autocomplete="off">
+                        </div>
                         <div class="form-grid">
                             <div class="field"><label for="name">Your name *</label><input id="name" name="name"
                                     required placeholder="Full name"></div>
@@ -203,7 +208,10 @@
                                     <option>Wedding Cake</option>
                                 </select></div>
                             <div class="field"><label for="eventDate">Event date *</label><input id="eventDate"
-                                    name="eventDate" type="date" required></div>
+                                    name="eventDate" type="date" required>
+                                <small class="field-hint" style="font-size:11px;color:var(--muted);display:block;margin-top:4px;">Minimum 48 hours advance notice required</small>
+                                <span class="field-error" id="eventDateErr" style="font-size:12px;color:var(--berry);display:none;margin-top:4px;" aria-live="polite"></span>
+                            </div>
                             <div class="field"><label for="servings">Number of servings</label><input id="servings"
                                     name="servings" type="number" min="4" placeholder="e.g. 30"></div>
                             <div class="field"><label for="flavor">Preferred flavor</label><select id="flavor"
@@ -386,7 +394,10 @@
                                         id="deliveryAddress" name="address" required
                                         placeholder="House number, street, area and city"></textarea></div>
                                 <div class="field"><label for="deliveryDate">Delivery date *</label><input
-                                        id="deliveryDate" name="date" type="date" required></div>
+                                        id="deliveryDate" name="date" type="date" required>
+                                    <small class="field-hint" style="font-size:11px;color:var(--muted);display:block;margin-top:4px;">Minimum 48 hours advance notice required</small>
+                                    <span class="field-error" id="deliveryDateErr" style="font-size:12px;color:var(--berry);display:none;margin-top:4px;" aria-live="polite"></span>
+                                </div>
                                 <div class="field"><label for="deliveryTime">Delivery time *</label><select
                                         id="deliveryTime" name="time" required>
                                         <option value="">Choose a time</option>
@@ -426,9 +437,6 @@
                             <div class="payment-options"><label class="payment-option"><input type="radio"
                                         name="payment" value="card" checked><span><b>Credit / Debit Card</b><small>Visa,
                                             Mastercard or Amex</small></span></label><label
-                                    class="payment-option"><input type="radio" name="payment"
-                                        value="transfer"><span><b>Bank transfer</b><small>We will share the details
-                                            after placing your order</small></span></label><label
                                     class="payment-option"><input type="radio" name="payment" value="cash"><span><b>Cash
                                             on delivery</b><small>Available in selected Colombo
                                             areas</small></span></label></div>
@@ -480,7 +488,7 @@
                         href="mailto:hello@kukicakes.lk">hello@kukicakes.lk</a>
                 </div>
             </div>
-            <div class="copyright"><span>© 2026 KukiCakes. Baked with love.</span><a data-page="admin">Admin</a></div>
+            <div class="copyright"><span>© 2026 KukiCakes. Baked with love.</span></div>
         </div>
     </footer>
     <div class="modal" id="productModal">
@@ -491,13 +499,9 @@
                 <h2 id="modalTitle">Cake name</h2>
                 <p class="subtext" id="modalDesc">Cake description</p>
                 <h3 id="modalPrice">Rs. 0</h3>
-                <div class="choice-group"><label>Choose your weight</label><select id="weightSelect"
+                <div class="choice-group"><label id="weightSelectLabel">Size / Package</label><select id="weightSelect"
                         style="width:100%; padding:10px; border:2px solid var(--berry); border-radius:4px; font-size:14px;">
-                        <option value="500g">500g</option>
-                        <option value="750g">750g</option>
-                        <option value="1kg">1kg</option>
-                        <option value="1.5kg">1.5kg</option>
-                        <option value="2kg">2kg</option>
+                        <option value="Standard">Standard</option>
                     </select></div>
                 <div class="choice-group" id="flavorChoice"><label for="cakeFlavor">Choose your flavour</label>
                     <select id="cakeFlavor"

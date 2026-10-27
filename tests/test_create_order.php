@@ -173,6 +173,26 @@ $badDate['delivery_date'] = '2020-01-01';
 $res = httpPost("{$baseUrl}/create-order.php", $badDate, $cookieJar);
 assertTest($res['code'] === 422 && isset($res['data']['errors']['delivery_date']), "Past delivery date rejected with 422");
 
+// Bypassing frontend: Direct API submission with today's date (too early)
+$tzColombo = new DateTimeZone('Asia/Colombo');
+$todayColombo = (new DateTime('today', $tzColombo))->format('Y-m-d');
+$earlyToday = $validOrderInfo;
+$earlyToday['delivery_date'] = $todayColombo;
+$resEarlyToday = httpPost("{$baseUrl}/create-order.php", $earlyToday, $cookieJar);
+assertTest($resEarlyToday['code'] === 422 && isset($resEarlyToday['data']['errors']['delivery_date']) && stripos($resEarlyToday['data']['errors']['delivery_date'], '48 hours') !== false, "Direct API request with today's date rejected by 48h guard (422)");
+
+// Bypassing frontend: Direct API submission with tomorrow's date (+1 day, too early)
+$tomorrowColombo = (new DateTime('today', $tzColombo))->modify('+1 day')->format('Y-m-d');
+$earlyTomorrow = $validOrderInfo;
+$earlyTomorrow['delivery_date'] = $tomorrowColombo;
+$resEarlyTomorrow = httpPost("{$baseUrl}/create-order.php", $earlyTomorrow, $cookieJar);
+assertTest($resEarlyTomorrow['code'] === 422 && isset($resEarlyTomorrow['data']['errors']['delivery_date']) && stripos($resEarlyTomorrow['data']['errors']['delivery_date'], '48 hours') !== false, "Direct API request with tomorrow's date rejected by 48h guard (422)");
+
+// Earliest permitted delivery date (today + 2 days in Asia/Colombo)
+$earliestColombo = (new DateTime('today', $tzColombo))->modify('+2 days')->format('Y-m-d');
+$validOrderInfo['delivery_date'] = $earliestColombo;
+$validOrderInfo['delivery_time_slot'] = 'Morning (8AM - 12PM)';
+
 // -----------------------------------------------------------------
 // Test 6: Successful Order Creation with Price Tamper Protection
 // -----------------------------------------------------------------
@@ -181,11 +201,11 @@ echo "\n[6] Testing Authoritative Server-Side Pricing & Order Creation...\n";
 // Add another item: product 2 = Elegant Pearl Wedding Cake, price 28500, qty 1
 $addCartStmt->execute([$customerId, 2, '2kg', 'Red Velvet', 'Tier 2 gold pearls', 1]);
 
-// Product 1 (Golden Pearl Anniversary Cake) price: 10,500.00 * 2 = 21,000.00
-// Product 2 (Burgundy Ombre Heart Anniversary Cake) price: 9,000.00 * 1 = 9,000.00
-// Expected Subtotal: 30,000.00
+// Product 1 (Golden Pearl Anniversary Cake) approved price: 10,300.00 * 2 = 20,600.00
+// Product 2 (Burgundy Ombre Heart Anniversary Cake) approved price: 10,100.00 * 1 = 10,100.00
+// Expected Subtotal: 30,700.00
 // Expected Delivery Fee: 500.00
-// Expected Total: 30,500.00
+// Expected Total: 31,200.00
 
 // In the POST payload, maliciously inject fake prices and fake subtotal to attempt tampering
 $tamperedPayload = $validOrderInfo;
@@ -206,9 +226,9 @@ $total = (float) ($orderData['total'] ?? 0);
 
 assertTest($orderId > 0, "Server returned valid order_id: {$orderId}");
 assertTest(preg_match('/^KC-\d{8}-[2-9A-HJ-NP-Z]{6}$/', $orderNumber) === 1, "Order number '{$orderNumber}' matches format KC-YYYYMMDD-XXXXXX");
-assertTest($subtotal === 30000.00, "Server recalculated subtotal authoritatively: Rs. 30,000.00 (tampered Rs. 10 ignored)");
+assertTest($subtotal === 30700.00, "Server recalculated subtotal authoritatively: Rs. 30,700.00 (tampered Rs. 10 ignored)");
 assertTest($deliveryFee === 500.00, "Delivery fee is exactly Rs. 500.00");
-assertTest($total === 30500.00, "Total is exactly Rs. 30,500.00 (tampered Rs. 15 ignored)");
+assertTest($total === 31200.00, "Total is exactly Rs. 31,200.00 (tampered Rs. 15 ignored)");
 
 // -----------------------------------------------------------------
 // Test 7: Verify Database Integrity (orders & order_item)
@@ -222,7 +242,7 @@ $dbOrder = $ordCheck->fetch(PDO::FETCH_ASSOC);
 assertTest($dbOrder !== false, "Row exists in `orders` table");
 assertTest($dbOrder['order_number'] === $orderNumber, "DB order_number matches response");
 assertTest($dbOrder['order_status'] === 'pending', "DB order_status is 'pending'");
-assertTest((float)$dbOrder['total'] === 30500.00, "DB total matches authoritative Rs. 30,500.00");
+assertTest((float)$dbOrder['total'] === 31200.00, "DB total matches authoritative Rs. 31,200.00");
 assertTest((int)$dbOrder['customer_id'] === $customerId, "DB customer_id matches authenticated session");
 
 $itemCheck = $pdo->prepare('SELECT * FROM `order_item` WHERE order_id = ? ORDER BY order_item_id ASC');
@@ -233,7 +253,7 @@ assertTest(count($items) === 2, "Found 2 items in `order_item`");
 
 // Verify Item 1
 assertTest((int)$items[0]['cake_id'] === 1, "Item 1 cake_id is 1");
-assertTest((float)$items[0]['unit_price'] === 10500.00, "Item 1 unit_price is 10500.00");
+assertTest((float)$items[0]['unit_price'] === 10300.00, "Item 1 unit_price is 10300.00");
 assertTest((int)$items[0]['quantity'] === 2, "Item 1 quantity is 2");
 assertTest($items[0]['weight'] === '1kg', "Item 1 weight is 1kg");
 assertTest($items[0]['flavor_id'] == 2, "Item 1 flavor_id resolved to Vanilla Bean (id 2)");
@@ -241,7 +261,7 @@ assertTest($items[0]['special_note'] === 'Happy Birthday Vinu', "Item 1 special_
 
 // Verify Item 2
 assertTest((int)$items[1]['cake_id'] === 2, "Item 2 cake_id is 2");
-assertTest((float)$items[1]['unit_price'] === 9000.00, "Item 2 unit_price is 9000.00");
+assertTest((float)$items[1]['unit_price'] === 10100.00, "Item 2 unit_price is 10100.00");
 assertTest((int)$items[1]['quantity'] === 1, "Item 2 quantity is 1");
 assertTest($items[1]['flavor_id'] == 4, "Item 2 flavor_id resolved to Red Velvet (id 4)");
 
@@ -250,15 +270,17 @@ assertTest($items[1]['flavor_id'] == 4, "Item 2 flavor_id resolved to Red Velvet
 // -----------------------------------------------------------------
 echo "\n[8] Testing Transfer & Cash Payment Methods...\n";
 
-// Order 2 with 'transfer'
+// Order 2 with 'transfer' and valid future delivery date (+5 days)
+$validOrderInfo['delivery_date'] = (new DateTime('today', $tzColombo))->modify('+5 days')->format('Y-m-d');
 $validOrderInfo['payment_method'] = 'transfer';
 $resTransfer = httpPost("{$baseUrl}/create-order.php", $validOrderInfo, $cookieJar);
-assertTest($resTransfer['code'] === 201 && $resTransfer['data']['order']['payment_method'] === 'transfer', "Order created with 'transfer'");
+assertTest($resTransfer['code'] === 201 && $resTransfer['data']['order']['payment_method'] === 'transfer', "Order created with 'transfer' and valid future delivery date (+5 days)");
 
-// Order 3 with 'cash'
+// Order 3 with 'cash' and valid future delivery date (+7 days)
+$validOrderInfo['delivery_date'] = (new DateTime('today', $tzColombo))->modify('+7 days')->format('Y-m-d');
 $validOrderInfo['payment_method'] = 'cash';
 $resCash = httpPost("{$baseUrl}/create-order.php", $validOrderInfo, $cookieJar);
-assertTest($resCash['code'] === 201 && $resCash['data']['order']['payment_method'] === 'cash', "Order created with 'cash'");
+assertTest($resCash['code'] === 201 && $resCash['data']['order']['payment_method'] === 'cash', "Order created with 'cash' and valid future delivery date (+7 days)");
 
 // -----------------------------------------------------------------
 // Cleanup

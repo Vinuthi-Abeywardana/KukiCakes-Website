@@ -88,6 +88,7 @@ if ($user) {
     $_SESSION['customer_id'] = (int) $user['customer_id'];
     $_SESSION['email']       = $user['email'];
     $_SESSION['name']        = $user['full_name'];
+    $_SESSION['phone']       = (string) ($user['phone_no'] ?? '');
     $_SESSION['role']        = (string) ($user['role'] ?? 'customer');
 
     if (empty($_SESSION['customer_id'])) {

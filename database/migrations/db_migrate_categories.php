@@ -25,10 +25,17 @@ date_default_timezone_set('Asia/Colombo');
 
 // Plain text output for CLI / web output
 if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
     header('Content-Type: text/plain; charset=utf-8');
+    exit("Forbidden: Database migrations may only be executed via the command line.\n");
 }
 
-require_once __DIR__ . '/../config/db.php';
+// Prevent execution when included or checked by another script
+if (isset($_SERVER['SCRIPT_FILENAME']) && realpath($_SERVER['SCRIPT_FILENAME']) !== realpath(__FILE__)) {
+    return;
+}
+
+require_once __DIR__ . '/../../config/db.php';
 
 echo "KúkiCakes — Week 8 Category Mapping Migration\n";
 echo str_repeat('=', 55) . "\n";
@@ -46,7 +53,7 @@ try {
     // ---------------------------------------------------------------
     // 2. Read and Parse js/data.js (Handling Escaped Apostrophes & Quotes)
     // ---------------------------------------------------------------
-    $jsPath = __DIR__ . '/../js/data.js';
+    $jsPath = __DIR__ . '/../../js/data.js';
     if (!file_exists($jsPath)) {
         throw new RuntimeException("Validation failed: Catalog source file not found at {$jsPath}.");
     }

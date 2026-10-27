@@ -104,9 +104,9 @@
                             <div id="contactEdit" class="hidden">
                                 <div class="profile-edit-group">
                                     <div>
-                                        <label class="profile-edit-label">Email</label>
-                                        <input class="profile-edit-input" type="email" value="" id="profileEmailDisplay" disabled style="opacity:.6;cursor:not-allowed">
-                                        <span style="font-size:11px;color:var(--muted);margin-top:4px;display:block">Email cannot be changed from here.</span>
+                                        <label class="profile-edit-label" for="editEmailInput">Email address *</label>
+                                        <input class="profile-edit-input" type="email" value="" id="editEmailInput" placeholder="you@example.com" autocomplete="email">
+                                        <span class="field-error" id="editEmailErr" aria-live="polite"></span>
                                     </div>
                                     <div>
                                         <label class="profile-edit-label" for="editPhoneInput">Phone / WhatsApp *</label>

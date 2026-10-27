@@ -83,7 +83,7 @@ assertTest('Setup: Test customer created', $testCustomerId > 0, "ID: $testCustom
 $res = httpReq('POST', "$baseUrl/api/forgot-password.php", ['email' => 'unregistered_dummy@domain.test']);
 assertTest(
     'Test 1: Unregistered email returns generic success without exposing absence',
-    $res['status'] === 200 && ($res['json']['success'] ?? false) === true && ($res['json']['account_found'] ?? true) === false,
+    $res['status'] === 200 && ($res['json']['success'] ?? false) === true && empty($res['json']['account_found']) && empty($res['json']['reset_token']),
     "Status: {$res['status']}, JSON: {$res['raw']}"
 );
 
@@ -93,27 +93,35 @@ $stmt->execute();
 $orphanCount = (int) $stmt->fetchColumn();
 assertTest('Test 1b: No reset tokens created in DB for non-existent users', $orphanCount === 0);
 
-// ── TEST 2: Registered Email Forgot Password ───────────────────
+// ── TEST 2: Registered Email Forgot Password (No Token/Account Leak) ──────────
 $res = httpReq('POST', "$baseUrl/api/forgot-password.php", ['email' => $testEmail]);
-$token = $res['json']['reset_token'] ?? '';
 assertTest(
-    'Test 2: Registered email generates reset token and reports accurate email delivery',
+    'Test 2: Registered email returns uniform success without leaking reset_token, reset_url or account_found',
     $res['status'] === 200 &&
     ($res['json']['success'] ?? false) === true &&
-    ($res['json']['email_delivery'] ?? true) === false && // accurately reports no SMTP configured
-    !empty($token),
+    empty($res['json']['reset_token']) &&
+    empty($res['json']['reset_url']) &&
+    empty($res['json']['account_found']),
     "Status: {$res['status']}, JSON: {$res['raw']}"
 );
 
-// Verify token hash in DB
-$tokenHash = hash('sha256', $token);
+// Verify token was generated and stored as SHA-256 hash in DB
 $stmt = $pdo->prepare('SELECT reset_id, token_hash, expires_at, used_at FROM `password_resets` WHERE customer_id = ? AND used_at IS NULL');
 $stmt->execute([$testCustomerId]);
 $dbReset = $stmt->fetch();
 assertTest(
     'Test 2b: Token stored as SHA-256 hash in DB (not plaintext)',
-    !empty($dbReset) && $dbReset['token_hash'] === $tokenHash && $dbReset['token_hash'] !== $token,
+    !empty($dbReset) && strlen($dbReset['token_hash']) === 64,
     "Stored: " . ($dbReset['token_hash'] ?? 'none')
+);
+
+// Obtain test token via secure CLI utility for downstream validation tests
+$cliOutput = shell_exec("C:\\xampp\\php\\php.exe " . escapeshellarg(__DIR__ . '/generate_test_reset_token.php') . " " . escapeshellarg($testEmail));
+$cliData = json_decode($cliOutput ?: '', true);
+$token = $cliData['reset_token'] ?? '';
+assertTest(
+    'Test 2c: CLI test utility generates valid token for downstream verification',
+    !empty($token) && strlen($token) === 64
 );
 
 // ── TEST 3: Validate Token (GET) ───────────────────────────────

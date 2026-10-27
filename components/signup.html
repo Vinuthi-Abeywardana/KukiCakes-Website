@@ -117,8 +117,8 @@
 
                     <p class="form-note" style="margin-top:14px">
                         By creating an account you agree to our
-                        <a href="#" style="color:var(--berry)">Terms</a> &amp;
-                        <a href="#" style="color:var(--berry)">Privacy Policy</a>.
+                        <button type="button" class="policy-link-btn" id="suTermsBtn" aria-haspopup="dialog">Terms of Service</button> &amp;
+                        <button type="button" class="policy-link-btn" id="suPrivacyBtn" aria-haspopup="dialog">Privacy Policy</button>.
                     </p>
                 </form>
 
@@ -138,4 +138,21 @@
             </div><!-- /.auth-card -->
         </div><!-- /.shell -->
     </div><!-- /.auth-page -->
+
+    <!-- Accessible Policy Modal Dialog -->
+    <div class="policy-modal-overlay" id="policyModalOverlay" role="dialog" aria-modal="true" aria-labelledby="policyModalTitle" hidden>
+        <div class="policy-modal-card">
+            <div class="policy-modal-header">
+                <h3 id="policyModalTitle">Terms of Service</h3>
+                <button type="button" class="policy-modal-close" id="policyModalClose" aria-label="Close dialog">&times;</button>
+            </div>
+            <div class="policy-modal-body" id="policyModalBody" tabindex="0">
+                <!-- Injected via setupPolicyModal in auth.js -->
+            </div>
+            <div class="policy-modal-footer">
+                <button type="button" class="btn btn-primary" id="policyModalConfirm">Close</button>
+            </div>
+        </div>
+    </div>
 </div><!-- /.page #signup-page -->
+

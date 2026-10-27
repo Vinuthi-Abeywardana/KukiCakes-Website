@@ -564,6 +564,10 @@
 .sidebar-nav {
     display: flex;
     flex-direction: column;
+    height: auto;
+    min-height: 0;
+    justify-content: flex-start;
+    align-items: stretch;
     padding: 8px;
     gap: 2px;
 }
@@ -1084,6 +1088,11 @@
     color: #5b21b6;
 }
 
+.status--ready {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
 .status--delivering {
     background: #fce7f3;
     color: #9d174d;
@@ -1205,6 +1214,49 @@
     margin-bottom: 8px;
 }
 
+.orders-loading,
+.orders-error {
+    text-align: center;
+    padding: 50px 20px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.orders-error strong {
+    display: block;
+    font: 600 18px var(--serif);
+    color: var(--berry);
+    margin-bottom: 8px;
+}
+
+.orders-retry-btn {
+    margin-top: 14px;
+    display: inline-block;
+}
+
+.order-items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+}
+
+.order-item-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.order-items-list .order-item-row:not(:last-child) {
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--line);
+}
+
 /* ----------------------------------------------------------------
    Auth Guard page
    ---------------------------------------------------------------- */
@@ -1295,4 +1347,138 @@
     border-radius: 50%;
     animation: kuki-spin 0.8s linear infinite;
     margin: 0 auto 16px;
+}
+
+/* ----------------------------------------------------------------
+   Signup Terms & Privacy Policy Modal
+   ---------------------------------------------------------------- */
+.policy-link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--berry);
+    text-decoration: underline;
+    cursor: pointer;
+    display: inline;
+}
+
+.policy-link-btn:focus-visible {
+    outline: 2px solid var(--berry);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+.policy-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(18, 14, 13, 0.65);
+    backdrop-filter: blur(4px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.policy-modal-overlay[hidden] {
+    display: none !important;
+}
+
+.policy-modal-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+    width: min(100%, 560px);
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    animation: modalSlideIn 0.22s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.policy-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--line, #eadfd9);
+}
+
+.policy-modal-header h3 {
+    margin: 0;
+    font-size: 19px;
+    color: var(--ink, #1f1d1d);
+}
+
+.policy-modal-close {
+    background: none;
+    border: none;
+    font-size: 26px;
+    line-height: 1;
+    color: var(--muted, #6c6360);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: color 0.15s, background-color 0.15s;
+}
+
+.policy-modal-close:hover,
+.policy-modal-close:focus-visible {
+    color: var(--ink, #1f1d1d);
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.policy-modal-body {
+    padding: 20px 24px;
+    overflow-y: auto;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--ink, #1f1d1d);
+    max-height: 60vh;
+}
+
+.policy-modal-body h4 {
+    margin: 16px 0 6px;
+    font-size: 14.5px;
+    color: var(--berry, #9b2226);
+}
+
+.policy-modal-body h4:first-child {
+    margin-top: 0;
+}
+
+.policy-modal-body p {
+    margin: 0 0 10px;
+}
+
+.policy-modal-body ul {
+    margin: 0 0 12px;
+    padding-left: 20px;
+}
+
+.policy-modal-body li {
+    margin-bottom: 5px;
+}
+
+.policy-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 14px 24px;
+    border-top: 1px solid var(--line, #eadfd9);
+    background: var(--paper, #fff9f5);
+    border-radius: 0 0 16px 16px;
 }

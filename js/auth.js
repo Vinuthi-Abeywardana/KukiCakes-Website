@@ -181,6 +181,9 @@
             console.warn('[KúkiCakes] Logout request failed:', err);
         }
         clearDisplayCache();
+        _customerOrders = null;
+        _ordersFetchPromise = null;
+        _currentOrdersFilter = 'all';
         updateNavbar(null);
         if (typeof window.setClientCart === 'function') {
             window.setClientCart([]);
@@ -270,7 +273,10 @@
             // Authenticated customer — navigate, then populate
             if (typeof goPage === 'function') goPage(page);
             if (page === 'profile' || page === 'account') setTimeout(populateProfilePage, 30);
-            if (page === 'my-orders')  setTimeout(() => renderOrdersPage('all'), 30);
+            if (page === 'my-orders') setTimeout(() => {
+                setupMyOrdersPage();
+                loadAndRenderOrders('all', true);
+            }, 30);
         } catch (err) {
             // Network error — deny access to be safe
             if (typeof goPage === 'function') goPage('auth-guard');
@@ -463,6 +469,121 @@
                 if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Create Account →'; }
             }
         });
+
+        setupPolicyModal();
+    }
+
+    function setupPolicyModal() {
+        const termsBtn = document.getElementById('suTermsBtn');
+        const privacyBtn = document.getElementById('suPrivacyBtn');
+        const overlay = document.getElementById('policyModalOverlay');
+        const titleEl = document.getElementById('policyModalTitle');
+        const bodyEl = document.getElementById('policyModalBody');
+        const closeBtn = document.getElementById('policyModalClose');
+        const confirmBtn = document.getElementById('policyModalConfirm');
+
+        if (!overlay || !titleEl || !bodyEl) return;
+
+        let lastFocusedElement = null;
+
+        const policies = {
+            terms: {
+                title: 'Terms of Service',
+                html: '<h4>1. Custom Cake Orders &amp; Advance Notice</h4>' +
+                      '<p>All celebration cakes and confections from KúkiCakes are freshly handcrafted to order from our studio in Colombo. To allow proper baking, decorating, and chilling, <strong>all celebration cake orders require a minimum of 48 hours advance notice</strong> prior to the scheduled delivery date.</p>' +
+                      '<h4>2. Orders &amp; Payment Confirmation</h4>' +
+                      '<p>An order is officially confirmed once payment or valid order details are verified:</p>' +
+                      '<ul>' +
+                      '<li><strong>Card Payment:</strong> Securely processed online via PayHere (Visa, Mastercard, Amex).</li>' +
+                      '<li><strong>Cash on Delivery:</strong> Available for select locations within the Colombo delivery zone.</li>' +
+                      '</ul>' +
+                      '<h4>3. Perishable Product Policy &amp; Cancellations</h4>' +
+                      '<p>Because cakes and baked confections are fresh, perishable culinary items made to custom specifications:</p>' +
+                      '<ul>' +
+                      '<li>Order cancellations or major design adjustments must be notified at least 24 hours prior to the scheduled delivery date.</li>' +
+                      '<li>Once production and decoration have commenced, orders cannot be cancelled or refunded.</li>' +
+                      '</ul>' +
+                      '<h4>4. Delivery &amp; Receipt</h4>' +
+                      '<p>Delivery is fulfilled during the selected delivery time slot. Please ensure an authorized recipient is present at the provided delivery address to safely receive the cake and store it under appropriate refrigeration or ambient conditions.</p>'
+            },
+            privacy: {
+                title: 'Privacy Policy',
+                html: '<h4>1. Information We Collect</h4>' +
+                      '<p>When you register an account or place an order with KúkiCakes, we collect necessary personal details, including your full name, email address, contact telephone number, and delivery address.</p>' +
+                      '<h4>2. How We Use Your Information</h4>' +
+                      '<p>Your personal data is used exclusively to:</p>' +
+                      '<ul>' +
+                      '<li>Process and deliver your cake orders accurately.</li>' +
+                      '<li>Communicate order confirmations, delivery schedules, and customer support updates.</li>' +
+                      '<li>Maintain your account details and order history for seamless re-ordering.</li>' +
+                      '</ul>' +
+                      '<h4>3. Payment Card Security</h4>' +
+                      '<p>Your payment security is paramount. KúkiCakes does not collect, process, or store credit or debit card numbers on our servers. All card transactions are handled directly through our certified payment gateway provider, PayHere.</p>' +
+                      '<h4>4. Data Protection &amp; Password Security</h4>' +
+                      '<p>Account passwords are encrypted using secure cryptographic hashing algorithms (BCRYPT). We do not sell, rent, or trade your personal data to any third-party marketing companies.</p>' +
+                      '<h4>5. Contact Us</h4>' +
+                      '<p>If you have any questions or wish to update your stored contact or delivery information, you can manage your profile directly in your account dashboard or contact our Colombo bakery studio.</p>'
+            }
+        };
+
+        function openModal(type) {
+            const policy = policies[type];
+            if (!policy) return;
+
+            lastFocusedElement = document.activeElement;
+            titleEl.textContent = policy.title;
+            bodyEl.innerHTML = policy.html;
+            overlay.removeAttribute('hidden');
+            document.body.style.overflow = 'hidden';
+
+            (closeBtn || bodyEl).focus();
+        }
+
+        function closeModal() {
+            if (overlay.hasAttribute('hidden')) return;
+            overlay.setAttribute('hidden', '');
+            document.body.style.overflow = '';
+            if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+                lastFocusedElement.focus();
+            }
+        }
+
+        termsBtn?.addEventListener('click', () => openModal('terms'));
+        privacyBtn?.addEventListener('click', () => openModal('privacy'));
+        closeBtn?.addEventListener('click', closeModal);
+        confirmBtn?.addEventListener('click', closeModal);
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                closeModal();
+            }
+        });
+
+        overlay.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                const focusable = overlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                if (focusable.length === 0) return;
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey) {
+                    if (document.activeElement === first) {
+                        e.preventDefault();
+                        last.focus();
+                    }
+                } else {
+                    if (document.activeElement === last) {
+                        e.preventDefault();
+                        first.focus();
+                    }
+                }
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !overlay.hasAttribute('hidden')) {
+                closeModal();
+            }
+        });
     }
 
     function validateSignupField(field) {
@@ -485,6 +606,10 @@
             case 'name':
                 if (!val)           error = 'Full name is required.';
                 else if (val.length < 2) error = 'Name must be at least 2 characters.';
+                else if (val.length > 100) error = 'Full name cannot exceed 100 characters.';
+                else if (/\d/.test(val)) error = 'Full name cannot contain numbers.';
+                else if (!/^[\p{L}\p{M}\s\-'.]+$/u.test(val)) error = 'Full name may only contain letters, spaces, hyphens, and apostrophes.';
+                else if (!/\p{L}/u.test(val)) error = 'Full name must contain at least one letter.';
                 break;
             case 'email':
                 if (!val)           error = 'Email address is required.';
@@ -609,40 +734,15 @@
                 if (res && res.success) {
                     if (statusBox) {
                         statusBox.hidden = false;
-                        if (res.account_found === false) {
-                            statusBox.style.background = '#fef2f2';
-                            statusBox.style.border = '1px solid #fecaca';
-                            statusBox.innerHTML = `
-                                <div style="color:var(--berry);font-weight:700;margin-bottom:4px;">Account Not Found</div>
-                                <div>No account is registered under "<strong>${_esc(emailVal)}</strong>".</div>
-                                <div style="margin-top:6px;font-size:12px;color:var(--muted);">
-                                    Please verify your email address, or <a href="#signup" data-page="signup" style="color:var(--berry);font-weight:700;">create an account →</a>
-                                </div>
-                            `;
-                        } else {
-                            statusBox.style.background = 'var(--peach-2)';
-                            statusBox.style.border = '1px solid var(--peach)';
-                            statusBox.innerHTML = `
-                                <div style="color:var(--forest,#2d6a4f);font-weight:700;margin-bottom:6px;">✓ Password reset instructions generated!</div>
-                                <div>Account: <strong>${_esc(emailVal)}</strong></div>
-                                <div style="color:var(--muted);font-size:12px;margin:8px 0;line-height:1.4;">
-                                    <strong>Notice:</strong> Email delivery is not configured on this server environment.<br>
-                                    Use the direct link below to proceed with setting your new password:
-                                </div>
-                                <a href="${res.reset_url}" id="fpGoResetBtn" class="btn btn-primary btn-sm" style="display:inline-block;text-decoration:none;margin-top:4px;">
-                                    Reset Password Now →
-                                </a>
-                            `;
-
-                            document.getElementById('fpGoResetBtn')?.addEventListener('click', (ev) => {
-                                ev.preventDefault();
-                                _activeResetToken = res.reset_token;
-                                if (typeof goPage === 'function') {
-                                    goPage(res.reset_url);
-                                }
-                                setTimeout(() => checkResetPasswordState(res.reset_token), 60);
-                            });
-                        }
+                        statusBox.style.background = 'var(--peach-2)';
+                        statusBox.style.border = '1px solid var(--peach)';
+                        statusBox.innerHTML = `
+                            <div style="color:var(--forest,#2d6a4f);font-weight:700;margin-bottom:6px;">✓ Password Reset Request Received</div>
+                            <div>If an account is registered under "<strong>${_esc(emailVal)}</strong>", password reset instructions have been sent.</div>
+                            <div style="margin-top:6px;font-size:12px;color:var(--muted);">
+                                Please check your email inbox and spam folder.
+                            </div>
+                        `;
                     }
                 } else {
                     if (statusBox) {
@@ -793,9 +893,13 @@
             _setText('profileEmail',       user.email || '—');
             _setText('profilePhone',       user.phone || 'Not provided');
 
-            // Pre-fill email in contact edit form (read-only)
-            const emailDisp = document.getElementById('profileEmailDisplay');
-            if (emailDisp) emailDisp.value = user.email || '';
+            // Pre-fill fields in edit forms
+            const emailInput = document.getElementById('editEmailInput');
+            if (emailInput) emailInput.value = user.email || '';
+            const phoneInput = document.getElementById('editPhoneInput');
+            if (phoneInput) phoneInput.value = (user.phone && user.phone !== 'Not provided' && user.phone !== '—') ? user.phone : '';
+            const nameInput = document.getElementById('editNameInput');
+            if (nameInput) nameInput.value = user.name || '';
 
             // Mini orders (still uses demo data — orders DB integration
             // requires orders to be linked to authenticated users)
@@ -822,7 +926,10 @@
 
                 if (panel === 'orders') {
                     if (typeof goPage === 'function') goPage('my-orders');
-                    setTimeout(() => renderOrdersPage('all'), 50);
+                    setTimeout(() => {
+                        setupMyOrdersPage();
+                        loadAndRenderOrders('all', true);
+                    }, 50);
                 }
 
                 // Load addresses on-demand
@@ -858,14 +965,19 @@
             // Pre-fill edit inputs from current displayed values
             if (prefix === 'personal') {
                 const input = document.getElementById('editNameInput');
-                if (input) input.value = document.getElementById('profileName')?.textContent || '';
+                const currName = document.getElementById('profileName')?.textContent?.trim() || '';
+                if (input) input.value = (currName === '—') ? '' : currName;
+                _applyFieldState(input, document.getElementById('editNameErr'), '');
             }
             if (prefix === 'contact') {
-                const input = document.getElementById('editPhoneInput');
-                if (input) input.value = document.getElementById('profilePhone')?.textContent || '';
-                const emailDisp = document.getElementById('profileEmailDisplay');
-                const cachedEmail = getDisplayCache()?.email || '';
-                if (emailDisp) emailDisp.value = cachedEmail;
+                const phoneInput = document.getElementById('editPhoneInput');
+                const currPhone = document.getElementById('profilePhone')?.textContent?.trim() || '';
+                if (phoneInput) phoneInput.value = (currPhone === 'Not provided' || currPhone === '—') ? '' : currPhone;
+                const emailInput = document.getElementById('editEmailInput');
+                const currEmail = document.getElementById('profileEmail')?.textContent?.trim() || getDisplayCache()?.email || '';
+                if (emailInput) emailInput.value = (currEmail === '—') ? '' : currEmail;
+                _applyFieldState(phoneInput, document.getElementById('editPhoneErr'), '');
+                _applyFieldState(emailInput, document.getElementById('editEmailErr'), '');
             }
         });
 
@@ -885,12 +997,38 @@
     }
 
     async function savePersInfo() {
-        const input  = document.getElementById('editNameInput');
-        const errEl  = document.getElementById('editNameErr');
-        const newName = input?.value.trim();
+        const input   = document.getElementById('editNameInput');
+        const errEl   = document.getElementById('editNameErr');
+        const newName = input?.value.trim() || '';
 
         if (!newName) {
             _applyFieldState(input, errEl, 'Full name is required.');
+            input?.focus();
+            return false;
+        }
+        if (newName.length < 2) {
+            _applyFieldState(input, errEl, 'Full name must be at least 2 characters.');
+            input?.focus();
+            return false;
+        }
+        if (newName.length > 100) {
+            _applyFieldState(input, errEl, 'Full name cannot exceed 100 characters.');
+            input?.focus();
+            return false;
+        }
+        if (/\d/.test(newName)) {
+            _applyFieldState(input, errEl, 'Full name cannot contain numbers.');
+            input?.focus();
+            return false;
+        }
+        if (!/^[\p{L}\p{M}\s\-'.]+$/u.test(newName)) {
+            _applyFieldState(input, errEl, 'Full name may only contain letters, spaces, hyphens, and apostrophes.');
+            input?.focus();
+            return false;
+        }
+        if (!/\p{L}/u.test(newName)) {
+            _applyFieldState(input, errEl, 'Full name must contain at least one letter.');
+            input?.focus();
             return false;
         }
         _applyFieldState(input, errEl, '');
@@ -898,11 +1036,12 @@
         try {
             const data = await apiPost('api/update-profile.php', {
                 full_name: newName,
-                phone: document.getElementById('profilePhone')?.textContent || '',
             });
 
             if (!data.success) {
-                _toast(data.message || 'Update failed.');
+                const errMsg = data.errors?.full_name || data.message || 'Update failed.';
+                _applyFieldState(input, errEl, errMsg);
+                _toast(errMsg);
                 return false;
             }
 
@@ -914,42 +1053,72 @@
             _setText('userAvatar',     initials);
             _setText('userDisplayName', user.name.split(' ')[0]);
             setDisplayCache(user);
-            _toast('Changes saved ✓');
+            _toast('Personal information saved ✓');
             return true;
         } catch (err) {
+            _applyFieldState(input, errEl, 'Update failed. Please check your connection.');
             _toast('Update failed. Please check your connection.');
             return false;
         }
     }
 
     async function saveContactInfo() {
-        const input    = document.getElementById('editPhoneInput');
-        const errEl    = document.getElementById('editPhoneErr');
-        const newPhone = input?.value.trim();
+        const phoneInput = document.getElementById('editPhoneInput');
+        const phoneErr   = document.getElementById('editPhoneErr');
+        const emailInput = document.getElementById('editEmailInput');
+        const emailErr   = document.getElementById('editEmailErr');
 
+        const newPhone = phoneInput?.value.trim() || '';
+        const newEmail = emailInput?.value.trim() || '';
+
+        let hasError = false;
+
+        // Validate email
+        if (!newEmail) {
+            _applyFieldState(emailInput, emailErr, 'Email address is required.');
+            hasError = true;
+        } else if (newEmail.length > 150) {
+            _applyFieldState(emailInput, emailErr, 'Email address cannot exceed 150 characters.');
+            hasError = true;
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+            _applyFieldState(emailInput, emailErr, 'Please enter a valid email address.');
+            hasError = true;
+        } else {
+            _applyFieldState(emailInput, emailErr, '');
+        }
+
+        // Validate phone
         if (!newPhone) {
-            _applyFieldState(input, errEl, 'Phone number is required.');
-            return false;
+            _applyFieldState(phoneInput, phoneErr, 'Phone number is required.');
+            hasError = true;
+        } else if (!/^[0-9+\s\-().]{7,20}$/.test(newPhone)) {
+            _applyFieldState(phoneInput, phoneErr, 'Please enter a valid phone number (7 to 20 digits).');
+            hasError = true;
+        } else {
+            _applyFieldState(phoneInput, phoneErr, '');
         }
-        if (!/^[+\d\s\-()]{7,20}$/.test(newPhone)) {
-            _applyFieldState(input, errEl, 'Please enter a valid phone number.');
-            return false;
-        }
-        _applyFieldState(input, errEl, '');
+
+        if (hasError) return false;
 
         try {
             const data = await apiPost('api/update-profile.php', {
-                full_name: document.getElementById('profileName')?.textContent || '',
-                phone:     newPhone,
+                email: newEmail,
+                phone: newPhone,
             });
 
             if (!data.success) {
+                if (data.errors?.email) _applyFieldState(emailInput, emailErr, data.errors.email);
+                if (data.errors?.phone) _applyFieldState(phoneInput, phoneErr, data.errors.phone);
                 _toast(data.message || 'Update failed.');
                 return false;
             }
 
-            _setText('profilePhone', data.user.phone || 'Not provided');
-            _toast('Changes saved ✓');
+            const user = data.user;
+            _setText('profileEmail',        user.email);
+            _setText('profileSidebarEmail', user.email);
+            _setText('profilePhone',        user.phone || 'Not provided');
+            setDisplayCache(user);
+            _toast('Contact information saved ✓');
             return true;
         } catch (err) {
             _toast('Update failed. Please check your connection.');
@@ -1227,103 +1396,214 @@
     }
 
     /* ============================================================
-       MY ORDERS — dummy display data
-       (Orders are not yet linked to auth users in the DB orders table)
+       MY ORDERS — LIVE DATABASE-BACKED ORDER HISTORY
+       Connected to server via GET /api/my-orders.php
        ============================================================ */
 
-    const ORDERS = [
-        {
-            id: 'KC-10234', date: '1 Sep 2026', cake: 'Golden Pearl Anniversary Cake',
-            img: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=160&q=80',
-            qty: 1, total: 10500, deliveryDate: '5 Sep 2026', status: 'delivered',
-            weight: '1 kg', flavor: 'Vanilla Bean', address: '42 Galle Road, Colombo 03',
-        },
-        {
-            id: 'KC-10298', date: '8 Sep 2026', cake: 'Blush Rosette Mirror 21st Cake',
-            img: 'https://images.unsplash.com/photo-1535141192574-5d4897c12636?auto=format&fit=crop&w=160&q=80',
-            qty: 1, total: 9000, deliveryDate: '12 Sep 2026', status: 'confirmed',
-            weight: '1.5 kg', flavor: 'Red Velvet', address: '12 Dharmapala Mawatha, Colombo 07',
-        },
-        {
-            id: 'KC-10312', date: '10 Sep 2026', cake: 'Chocolate Fudge Cupcake Box × 12',
-            img: 'https://images.unsplash.com/photo-1535254973040-607b474cb50d?auto=format&fit=crop&w=160&q=80',
-            qty: 12, total: 6600, deliveryDate: '14 Sep 2026', status: 'preparing',
-            weight: '—', flavor: 'Chocolate', address: '42 Galle Road, Colombo 03',
-        },
-        {
-            id: 'KC-10325', date: '12 Sep 2026', cake: 'White Wedding Classic Cake',
-            img: 'https://images.unsplash.com/photo-1519915028121-7d3463d20b13?auto=format&fit=crop&w=160&q=80',
-            qty: 1, total: 16000, deliveryDate: '16 Sep 2026', status: 'pending',
-            weight: '2 kg', flavor: 'Vanilla Bean', address: '78 Flower Road, Colombo 07',
-        },
-        {
-            id: 'KC-10271', date: '25 Aug 2026', cake: 'Blush Engagement Cake',
-            img: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?auto=format&fit=crop&w=160&q=80',
-            qty: 1, total: 11500, deliveryDate: '28 Aug 2026', status: 'delivering',
-            weight: '1.5 kg', flavor: 'Butter Cake', address: '12 Dharmapala Mawatha, Colombo 07',
-        },
-        {
-            id: 'KC-10188', date: '18 Aug 2026', cake: 'Disco Nights 21st Birthday Cake',
-            img: 'https://images.unsplash.com/photo-1571115177098-24ec42ed204d?auto=format&fit=crop&w=160&q=80',
-            qty: 1, total: 9000, deliveryDate: '21 Aug 2026', status: 'cancelled',
-            weight: '1 kg', flavor: 'Coffee', address: '7 Bagatalle Road, Colombo 03',
-        },
-    ];
+    let _customerOrders = null;
+    let _ordersFetchPromise = null;
+    let _currentOrdersFilter = 'all';
+    let _myOrdersInitialized = false;
 
     const STATUS_LABEL = {
-        pending: 'Pending', confirmed: 'Confirmed', preparing: 'Preparing',
-        delivering: 'Out for Delivery', delivered: 'Delivered', cancelled: 'Cancelled',
+        pending: 'Pending',
+        confirmed: 'Confirmed',
+        preparing: 'Preparing',
+        in_progress: 'Preparing',
+        ready: 'Ready',
+        delivering: 'Out for Delivery',
+        delivered: 'Delivered',
+        cancelled: 'Cancelled',
     };
 
-    function renderOrdersPage(filterStatus) {
+    /**
+     * Fetch orders for the authenticated customer.
+     * Caches in memory during the active session; supports forced reload.
+     */
+    async function fetchCustomerOrders(forceReload = false) {
+        if (_customerOrders !== null && !forceReload) {
+            return _customerOrders;
+        }
+        if (_ordersFetchPromise && !forceReload) {
+            return _ordersFetchPromise;
+        }
+
+        _ordersFetchPromise = apiGet('api/my-orders.php')
+            .then(res => {
+                if (res && res.success && Array.isArray(res.orders)) {
+                    _customerOrders = res.orders;
+                    return _customerOrders;
+                }
+                throw new Error(res?.message || 'Could not load orders');
+            })
+            .finally(() => {
+                _ordersFetchPromise = null;
+            });
+
+        return _ordersFetchPromise;
+    }
+
+    /**
+     * Render the orders list given an array of orders and a filter status.
+     */
+    function renderOrdersList(orders, filterStatus) {
         const list  = document.getElementById('ordersList');
         const empty = document.getElementById('ordersEmpty');
         if (!list) return;
 
         const filtered = (filterStatus === 'all')
-            ? ORDERS
-            : ORDERS.filter(o => o.status === filterStatus);
+            ? orders
+            : orders.filter(o => o.status === filterStatus || o.raw_status === filterStatus);
 
         if (filtered.length === 0) {
             list.innerHTML = '';
-            empty?.removeAttribute('hidden');
+            if (empty) {
+                empty.removeAttribute('hidden');
+                if (orders.length === 0) {
+                    empty.innerHTML = `
+                        <strong>You have not placed any orders yet</strong>
+                        Browse our handcrafted cakes and celebrate your sweetest moments.
+                        <div style="margin-top:16px;">
+                            <a href="#cakes" class="btn btn-primary btn-sm" style="display:inline-block;text-decoration:none;">Explore Our Cakes →</a>
+                        </div>
+                    `;
+                } else {
+                    empty.innerHTML = `
+                        <strong>No orders found</strong>
+                        No orders match the "${_esc(STATUS_LABEL[filterStatus] || filterStatus)}" filter. Try a different status or view all orders.
+                    `;
+                }
+            }
         } else {
             empty?.setAttribute('hidden', '');
-            list.innerHTML = filtered.map(o => `
-                <article class="order-card" id="ocard-${_esc(o.id)}">
-                    <div class="order-card-header">
-                        <div>
-                            <div class="order-number">Order #${_esc(o.id)}</div>
-                            <div class="order-date">Ordered ${_esc(o.date)}</div>
+            list.innerHTML = filtered.map(o => {
+                const items = Array.isArray(o.items) && o.items.length ? o.items : [{
+                    cake: o.cake || 'Artisan Cake',
+                    img: o.img || 'docs/logo1_1.png',
+                    qty: o.qty || 1,
+                    weight: o.weight || '500g',
+                    flavor: o.flavor || 'Standard',
+                    unit_price: o.total || 0,
+                    line_total: o.total || 0,
+                    note: ''
+                }];
+
+                let itemsHtml = '';
+                if (items.length === 1) {
+                    const it = items[0];
+                    itemsHtml = `
+                        <div class="order-card-body">
+                            <img class="order-cake-img" src="${_esc(it.img || 'docs/logo1_1.png')}" alt="${_esc(it.cake)}" loading="lazy" onerror="this.src='docs/logo1_1.png'">
+                            <div class="order-cake-info">
+                                <h4>${_esc(it.cake)}</h4>
+                                <p>Weight: ${_esc(it.weight)} &nbsp;·&nbsp; Flavour: ${_esc(it.flavor)} &nbsp;·&nbsp; Qty: ${Number(it.qty)}</p>
+                                ${it.note ? `<p style="font-size:11px;color:var(--muted);margin-top:3px;font-style:italic">Note: ${_esc(it.note)}</p>` : ''}
+                            </div>
                         </div>
-                        <span class="order-status-badge status--${_esc(o.status)}">${_esc(STATUS_LABEL[o.status] || o.status)}</span>
-                    </div>
-                    <div class="order-card-body">
-                        <img class="order-cake-img" src="${_esc(o.img)}" alt="${_esc(o.cake)}" loading="lazy">
-                        <div class="order-cake-info">
-                            <h4>${_esc(o.cake)}</h4>
-                            <p>Weight: ${_esc(o.weight)} &nbsp;·&nbsp; Flavour: ${_esc(o.flavor)} &nbsp;·&nbsp; Qty: ${o.qty}</p>
+                    `;
+                } else {
+                    itemsHtml = `
+                        <div class="order-items-list">
+                            ${items.map(it => `
+                                <div class="order-item-row">
+                                    <img class="order-cake-img" src="${_esc(it.img || 'docs/logo1_1.png')}" alt="${_esc(it.cake)}" loading="lazy" onerror="this.src='docs/logo1_1.png'">
+                                    <div class="order-cake-info">
+                                        <h4>${_esc(it.cake)}</h4>
+                                        <p>Weight: ${_esc(it.weight)} &nbsp;·&nbsp; Flavour: ${_esc(it.flavor)} &nbsp;·&nbsp; Qty: ${Number(it.qty)} &nbsp;·&nbsp; Rs. ${Number(it.line_total || (it.unit_price * it.qty)).toLocaleString()}</p>
+                                        ${it.note ? `<p style="font-size:11px;color:var(--muted);margin-top:3px;font-style:italic">Note: ${_esc(it.note)}</p>` : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
                         </div>
-                    </div>
-                    <div class="order-card-footer">
-                        <div>
-                            <div class="order-total">Rs. ${o.total.toLocaleString()}</div>
-                            <div class="order-delivery-date">📅 Delivery: ${_esc(o.deliveryDate)}</div>
+                    `;
+                }
+
+                const statusKey = o.status || 'pending';
+                const statusLabel = STATUS_LABEL[statusKey] || STATUS_LABEL[o.raw_status] || statusKey;
+                const badgeClass = `status--${_esc(statusKey)}`;
+                const deliveryStr = o.deliveryDate || o.delivery_date || '—';
+                const slotStr = o.deliveryTimeSlot ? ` (${_esc(o.deliveryTimeSlot)})` : '';
+
+                return `
+                    <article class="order-card" id="ocard-${_esc(o.id)}">
+                        <div class="order-card-header">
+                            <div>
+                                <div class="order-number">Order #${_esc(o.id)}</div>
+                                <div class="order-date">Ordered ${_esc(o.date)}</div>
+                            </div>
+                            <span class="order-status-badge ${badgeClass}">${_esc(statusLabel)}</span>
                         </div>
-                        <button class="order-view-btn" onclick="kukiToggleDetails('${_esc(o.id)}')">View Details ↓</button>
-                    </div>
-                    <dl class="order-details-content" id="odetails-${_esc(o.id)}" style="display:none">
-                        <dt>Order Number</dt><dd>#${_esc(o.id)}</dd>
-                        <dt>Order Date</dt>  <dd>${_esc(o.date)}</dd>
-                        <dt>Delivery Date</dt><dd>${_esc(o.deliveryDate)}</dd>
-                        <dt>Delivery Address</dt><dd>${_esc(o.address)}</dd>
-                        <dt>Flavour</dt>     <dd>${_esc(o.flavor)}</dd>
-                        <dt>Weight</dt>      <dd>${_esc(o.weight)}</dd>
-                    </dl>
-                </article>
-            `).join('');
+                        ${itemsHtml}
+                        <div class="order-card-footer">
+                            <div>
+                                <div class="order-total">Rs. ${Number(o.total).toLocaleString()}</div>
+                                <div class="order-delivery-date">📅 Delivery: ${_esc(deliveryStr)}${slotStr}</div>
+                            </div>
+                            <button class="order-view-btn" onclick="kukiToggleDetails('${_esc(o.id)}')">View Details ↓</button>
+                        </div>
+                        <dl class="order-details-content" id="odetails-${_esc(o.id)}" style="display:none">
+                            <dt>Order Number</dt><dd>#${_esc(o.id)}</dd>
+                            <dt>Order Date</dt>  <dd>${_esc(o.date)}</dd>
+                            <dt>Delivery Date</dt><dd>${_esc(deliveryStr)}${o.deliveryTimeSlot ? ` · ${_esc(o.deliveryTimeSlot)}` : ''}</dd>
+                            <dt>Delivery Address</dt><dd>${_esc(o.address || '—')}</dd>
+                            ${o.recipient_name ? `<dt>Recipient</dt><dd>${_esc(o.recipient_name)}${o.recipient_phone ? ` (${_esc(o.recipient_phone)})` : ''}</dd>` : ''}
+                            <dt>Payment Method</dt><dd>${_esc((o.payment_method || '').toUpperCase())} &nbsp;(${_esc(o.payment_status || 'pending')})</dd>
+                            <dt>Subtotal / Delivery</dt><dd>Rs. ${Number(o.subtotal || 0).toLocaleString()} + Rs. ${Number(o.delivery_fee || 0).toLocaleString()} delivery</dd>
+                            <dt>Total Amount</dt><dd style="font-weight:700;color:var(--berry)">Rs. ${Number(o.total).toLocaleString()}</dd>
+                            ${o.special_instructions ? `<dt>Special Instructions</dt><dd style="grid-column:span 2">${_esc(o.special_instructions)}</dd>` : ''}
+                        </dl>
+                    </article>
+                `;
+            }).join('');
         }
     }
+
+    /**
+     * Load orders from server and render with current status filter.
+     * Shows loading skeleton, handles errors with retry button.
+     */
+    async function loadAndRenderOrders(filterStatus = _currentOrdersFilter, forceReload = false) {
+        const list  = document.getElementById('ordersList');
+        const empty = document.getElementById('ordersEmpty');
+        if (!list) return;
+
+        _currentOrdersFilter = filterStatus || 'all';
+
+        // Show loading state if orders not yet in memory or if explicitly refreshing
+        if (_customerOrders === null || forceReload) {
+            list.innerHTML = `
+                <div class="orders-loading">
+                    <div style="font-size:24px;margin-bottom:8px;">🎂</div>
+                    <strong>Loading your sweet orders...</strong>
+                    <div style="font-size:12px;color:var(--muted);margin-top:4px;">Retrieving your cake history</div>
+                </div>
+            `;
+            empty?.setAttribute('hidden', '');
+        }
+
+        try {
+            const orders = await fetchCustomerOrders(forceReload);
+            renderOrdersList(orders, _currentOrdersFilter);
+        } catch (err) {
+            console.warn('[KúkiCakes] Failed to load orders:', err);
+            empty?.setAttribute('hidden', '');
+            if (err.message && err.message.includes('Authentication required')) {
+                if (typeof goPage === 'function') goPage('auth-guard');
+                return;
+            }
+            list.innerHTML = `
+                <div class="orders-error">
+                    <strong>Could not load your orders</strong>
+                    <p style="margin:0;font-size:13px;color:var(--muted);">${_esc(err.message || 'Please check your connection and try again.')}</p>
+                    <button class="btn btn-primary btn-sm orders-retry-btn" onclick="kukiRetryOrders()">Retry ⟳</button>
+                </div>
+            `;
+        }
+    }
+
+    window.kukiRetryOrders = function () {
+        loadAndRenderOrders(_currentOrdersFilter, true);
+    };
 
     window.kukiToggleDetails = function (orderId) {
         const details = document.getElementById(`odetails-${orderId}`);
@@ -1335,36 +1615,76 @@
     };
 
     function setupMyOrdersPage() {
-        document.querySelectorAll('.orders-filter-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.orders-filter-btn').forEach(b => {
-                    b.classList.remove('active');
-                    b.setAttribute('aria-selected', 'false');
+        if (!_myOrdersInitialized) {
+            document.querySelectorAll('.orders-filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.orders-filter-btn').forEach(b => {
+                        b.classList.remove('active');
+                        b.setAttribute('aria-selected', 'false');
+                    });
+                    btn.classList.add('active');
+                    btn.setAttribute('aria-selected', 'true');
+                    _currentOrdersFilter = btn.dataset.status || 'all';
+                    if (_customerOrders !== null) {
+                        renderOrdersList(_customerOrders, _currentOrdersFilter);
+                    } else {
+                        loadAndRenderOrders(_currentOrdersFilter);
+                    }
                 });
-                btn.classList.add('active');
-                btn.setAttribute('aria-selected', 'true');
-                renderOrdersPage(btn.dataset.status);
             });
-        });
-        renderOrdersPage('all');
+            _myOrdersInitialized = true;
+        }
+
+        const myOrdersPage = document.getElementById('my-orders-page');
+        const isCurrentPage = myOrdersPage?.classList.contains('active') || location.hash.slice(1).split('?')[0] === 'my-orders';
+        if (isCurrentPage) {
+            loadAndRenderOrders(_currentOrdersFilter);
+        }
     }
 
-    function renderMiniOrders() {
+    async function renderMiniOrders() {
         const container = document.getElementById('profileOrdersMini');
         if (!container) return;
-        const recent = ORDERS.slice(0, 3);
-        container.innerHTML = recent.map(o => `
-            <div class="profile-order-mini">
-                <div class="profile-order-mini-info">
-                    <b>${_esc(o.cake)}</b>
-                    <span>${_esc(o.date)} &nbsp;·&nbsp; #${_esc(o.id)}</span>
+
+        try {
+            const orders = await fetchCustomerOrders();
+            if (!orders || orders.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align:center;padding:24px 10px;color:var(--muted);font-size:13px;">
+                        No orders placed yet.
+                    </div>
+                `;
+                return;
+            }
+
+            const recent = orders.slice(0, 3);
+            container.innerHTML = recent.map(o => {
+                const statusKey = o.status || 'pending';
+                const statusLabel = STATUS_LABEL[statusKey] || STATUS_LABEL[o.raw_status] || statusKey;
+                const badgeClass = `status--${_esc(statusKey)}`;
+                const itemCount = o.item_count || (o.items ? o.items.length : 1);
+                const cakeTitle = itemCount > 1 ? `${_esc(o.cake)} + ${itemCount - 1} more` : _esc(o.cake);
+
+                return `
+                    <div class="profile-order-mini">
+                        <div class="profile-order-mini-info">
+                            <b>${cakeTitle}</b>
+                            <span>${_esc(o.date)} &nbsp;·&nbsp; #${_esc(o.id)}</span>
+                        </div>
+                        <div class="profile-order-mini-right">
+                            <div class="profile-order-mini-price">Rs. ${Number(o.total).toLocaleString()}</div>
+                            <span class="order-status-badge ${badgeClass}" style="font-size:10px;padding:3px 8px">${_esc(statusLabel)}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (err) {
+            container.innerHTML = `
+                <div style="text-align:center;padding:16px 10px;color:var(--muted);font-size:12px;">
+                    Unable to load recent orders.
                 </div>
-                <div class="profile-order-mini-right">
-                    <div class="profile-order-mini-price">Rs. ${o.total.toLocaleString()}</div>
-                    <span class="order-status-badge status--${_esc(o.status)}" style="font-size:10px;padding:3px 8px">${_esc(STATUS_LABEL[o.status])}</span>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }
     }
 
     /* ============================================================
@@ -1407,11 +1727,13 @@
     }
 
     function _esc(str) {
+        if (str === null || str === undefined) return '';
         return String(str)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     function setupToggle(btn) {
@@ -1648,6 +1970,7 @@
         // Handle direct deep-links
         const hash = location.hash.slice(1).split('?')[0].split('&')[0];
         if (hash === 'profile' || hash === 'account') populateProfilePage();
+        if (hash === 'my-orders') { setupMyOrdersPage(); loadAndRenderOrders('all'); }
         if (hash === 'forgot-password') setTimeout(showForgotPasswordForm, 100);
         if (hash.startsWith('reset-password')) setTimeout(checkResetPasswordState, 120);
         if (hash === 'admin') window.guardAdminRoute();
@@ -1656,6 +1979,9 @@
             const h = location.hash.slice(1).split('?')[0].split('&')[0];
             if (h === 'profile' || h === 'account') {
                 populateProfilePage();
+            } else if (h === 'my-orders') {
+                setupMyOrdersPage();
+                loadAndRenderOrders('all');
             } else if (h === 'forgot-password') {
                 showForgotPasswordForm();
             } else if (h === 'login') {

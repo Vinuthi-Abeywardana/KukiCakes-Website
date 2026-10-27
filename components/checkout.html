@@ -19,7 +19,7 @@
                     <div class="checkout-heading"><span>02</span><div><div class="eyebrow">Where and when</div><h2>Delivery information</h2></div></div>
                     <div class="form-grid">
                         <div class="field full"><label for="deliveryAddress">Delivery address *</label><textarea id="deliveryAddress" name="address" required placeholder="House number, street, area and city"></textarea></div>
-                        <div class="field"><label for="deliveryDate">Delivery date *</label><input id="deliveryDate" name="date" type="date" required></div>
+                        <div class="field"><label for="deliveryDate">Delivery date *</label><input id="deliveryDate" name="date" type="date" required><small class="field-hint" style="font-size:11px;color:var(--muted);display:block;margin-top:4px;">Minimum 48 hours advance notice required</small><span class="field-error" id="deliveryDateErr" style="font-size:12px;color:var(--berry);display:none;margin-top:4px;" aria-live="polite"></span></div>
                         <div class="field"><label for="deliveryTime">Delivery time *</label><select id="deliveryTime" name="time" required><option value="">Choose a time</option><option>Morning (8AM - 12PM)</option><option>Afternoon (12PM - 4PM)</option><option>Evening (4PM - 8PM)</option></select></div>
                         <div class="field full"><label for="deliveryNote">Special instructions</label><textarea id="deliveryNote" name="note" placeholder="Gate details, message on the cake or anything else we should know"></textarea></div>
                     </div>
@@ -37,7 +37,6 @@
                     <div class="checkout-heading"><span>04</span><div><div class="eyebrow">Securely yours</div><h2>Payment method</h2></div></div>
                     <div class="payment-options">
                         <label class="payment-option"><input type="radio" name="payment" value="card" checked><span><b>Credit / Debit Card</b><small>Visa, Mastercard or Amex</small></span></label>
-                        <label class="payment-option"><input type="radio" name="payment" value="transfer"><span><b>Bank transfer</b><small>We will share the details after placing your order</small></span></label>
                         <label class="payment-option"><input type="radio" name="payment" value="cash"><span><b>Cash on delivery</b><small>Available in selected Colombo areas</small></span></label>
                     </div>
                     <button class="btn btn-primary checkout-submit" type="submit">Place order / Pay now <span>→</span></button>

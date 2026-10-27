@@ -1,0 +1,45 @@
+<?php
+/**
+ * KúkiCakes — Local SMTP Mail Configuration (Example Template)
+ *
+ * Copy this file to `config/mail.local.php` to configure your local SMTP credentials.
+ * `config/mail.local.php` is ignored by Git and will NEVER be committed.
+ *
+ * Example 1: Mailtrap / Papercut (Local Development & Testing)
+ * -------------------------------------------------------------
+ * define('SMTP_HOST', 'sandbox.smtp.mailtrap.io');
+ * define('SMTP_PORT', 2525);
+ * define('SMTP_ENCRYPTION', 'tls'); // or 'none' for local Papercut on port 25
+ * define('SMTP_USERNAME', 'your_mailtrap_username');
+ * define('SMTP_PASSWORD', 'your_mailtrap_password');
+ * define('SMTP_FROM_EMAIL', 'orders@kukicakes.lk');
+ * define('SMTP_FROM_NAME', 'KúkiCakes Colombo');
+ *
+ * Example 2: Google Workspace / Gmail (with 16-character App Password)
+ * --------------------------------------------------------------------
+ * define('SMTP_HOST', 'smtp.gmail.com');
+ * define('SMTP_PORT', 587);
+ * define('SMTP_ENCRYPTION', 'tls');
+ * define('SMTP_USERNAME', 'your_email@gmail.com');
+ * define('SMTP_PASSWORD', 'your_16_char_google_app_password');
+ * define('SMTP_FROM_EMAIL', 'your_email@gmail.com');
+ * define('SMTP_FROM_NAME', 'KúkiCakes Colombo');
+ *
+ * Example 3: SendGrid / Brevo / Amazon SES
+ * ----------------------------------------
+ * define('SMTP_HOST', 'smtp.sendgrid.net');
+ * define('SMTP_PORT', 587);
+ * define('SMTP_ENCRYPTION', 'tls');
+ * define('SMTP_USERNAME', 'apikey');
+ * define('SMTP_PASSWORD', 'your_sendgrid_api_key');
+ * define('SMTP_FROM_EMAIL', 'verified_sender@kukicakes.lk');
+ * define('SMTP_FROM_NAME', 'KúkiCakes Colombo');
+ */
+
+// define('SMTP_HOST', 'smtp.example.com');
+// define('SMTP_PORT', 587);
+// define('SMTP_ENCRYPTION', 'tls');
+// define('SMTP_USERNAME', 'user@example.com');
+// define('SMTP_PASSWORD', 'secret');
+// define('SMTP_FROM_EMAIL', 'orders@kukicakes.lk');
+// define('SMTP_FROM_NAME', 'KúkiCakes Colombo');

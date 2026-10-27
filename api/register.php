@@ -33,8 +33,18 @@ $phone           = trim($body['phone']            ?? '');
 
 $errors = [];
 
-if (strlen($fullName) < 2) {
+if ($fullName === '') {
+    $errors[] = 'Full name is required.';
+} elseif (mb_strlen($fullName) < 2) {
     $errors[] = 'Full name must be at least 2 characters.';
+} elseif (mb_strlen($fullName) > 100) {
+    $errors[] = 'Full name cannot exceed 100 characters.';
+} elseif (preg_match('/[0-9]/', $fullName)) {
+    $errors[] = 'Full name cannot contain numbers.';
+} elseif (!preg_match('/^[\p{L}\p{M}\s\-\'.]+$/u', $fullName)) {
+    $errors[] = 'Full name may only contain letters, spaces, hyphens, and apostrophes.';
+} elseif (!preg_match('/\p{L}/u', $fullName)) {
+    $errors[] = 'Full name must contain at least one letter.';
 }
 
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {

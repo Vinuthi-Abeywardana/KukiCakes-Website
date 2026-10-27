@@ -45,6 +45,12 @@
         timer: null
     };
 
+    const _inquiriesState = {
+        search: '',
+        status: '',
+        timer: null
+    };
+
     // ─────────────────────────────────────────────────────────────────
     // Utility Helpers
     // ─────────────────────────────────────────────────────────────────
@@ -569,7 +575,20 @@
             savePayBtn.onclick = async () => {
                 const newPayStatus = document.getElementById('modalPaymentStatusSelect')?.value;
                 if (!newPayStatus) return;
-                if (ord.payment_method === 'card' && (newPayStatus === 'cancelled' || newPayStatus === 'charged_back')) {
+
+                let payherePaymentId = null;
+
+                if (ord.payment_method === 'card' && newPayStatus === 'paid' && ord.payment_status !== 'paid') {
+                    const defaultRef = ord.payhere_payment_id || `PH-${ord.order_number.replace(/^KC-/, '')}`;
+                    const promptVal = prompt(
+                        `Order #${ord.order_number} is an online card order.\n\nPlease enter the verified PayHere Payment ID (from your PayHere Merchant Portal or transaction confirmation) as proof of payment:`,
+                        defaultRef
+                    );
+                    if (promptVal === null) {
+                        return;
+                    }
+                    payherePaymentId = promptVal.trim() || defaultRef;
+                } else if (ord.payment_method === 'card' && (newPayStatus === 'cancelled' || newPayStatus === 'charged_back')) {
                     const refundWarning = "Warning: This action updates the payment status in the local KúkiCakes database only. It does NOT issue a refund through PayHere. If a refund is required, process it separately through your PayHere Merchant Portal before recording the appropriate status. Do you want to continue?";
                     if (!confirm(refundWarning)) {
                         savePayBtn.disabled = false;
@@ -586,13 +605,17 @@
                 }
                 savePayBtn.disabled = true;
                 savePayBtn.textContent = 'Updating...';
+                const payload = {
+                    action: 'update_payment_status',
+                    order_id: ord.order_id,
+                    payment_status: newPayStatus
+                };
+                if (payherePaymentId) {
+                    payload.payhere_payment_id = payherePaymentId;
+                }
                 const upPayRes = await adminFetch('api/admin-orders.php', {
                     method: 'POST',
-                    body: {
-                        action: 'update_payment_status',
-                        order_id: ord.order_id,
-                        payment_status: newPayStatus
-                    }
+                    body: payload
                 });
                 savePayBtn.disabled = false;
                 savePayBtn.textContent = 'Save';
@@ -1051,11 +1074,256 @@
     }
 
     // ─────────────────────────────────────────────────────────────────
+    // MODULE 5: INQUIRIES MANAGEMENT
+    // ─────────────────────────────────────────────────────────────────
+
+    function getInquiryStatusBadge(status) {
+        const s = String(status || 'Pending').toLowerCase();
+        let badgeClass = 'badge-pending';
+        if (s === 'in review') badgeClass = 'badge-confirmed';
+        else if (s === 'quoted') badgeClass = 'badge-inprogress';
+        else if (s === 'confirmed') badgeClass = 'badge-ready';
+        else if (s === 'completed') badgeClass = 'badge-delivered';
+        else if (s === 'cancelled') badgeClass = 'badge-cancelled';
+        return `<span class="badge-status ${badgeClass}">${escapeHtml(status || 'Pending')}</span>`;
+    }
+
+    async function loadInquiries() {
+        const tbody = document.getElementById('inquiriesTbody');
+        if (!tbody) return;
+
+        tbody.innerHTML = '<tr><td colspan="8"><div class="admin-state-box"><span class="state-icon">⏳</span><p>Loading inquiries from database...</p></div></td></tr>';
+
+        const params = new URLSearchParams();
+        if (_inquiriesState.status) params.append('status', _inquiriesState.status);
+        if (_inquiriesState.search) params.append('search', _inquiriesState.search);
+
+        const res = await adminFetch('api/admin-inquiries.php?' + params.toString());
+        if (!res.ok || !res.data) {
+            tbody.innerHTML = '<tr><td colspan="8"><div class="admin-state-box"><span class="state-icon">⚠️</span><h4>Failed to load inquiries</h4><p>Unable to connect to inquiry API.</p><button type="button" class="btn btn-primary btn-sm" id="retryInquiriesBtn">Try again</button></div></td></tr>';
+            return;
+        }
+
+        const inquiries = res.data.inquiries || [];
+        const counts = res.data.counts || {};
+
+        // Update status chips count
+        const setChip = (id, count) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = count ?? 0;
+        };
+        setChip('chipCountInqAll', counts.all);
+        setChip('chipCountInqPending', counts['Pending']);
+        setChip('chipCountInqInReview', counts['In Review']);
+        setChip('chipCountInqQuoted', counts['Quoted']);
+        setChip('chipCountInqConfirmed', counts['Confirmed']);
+        setChip('chipCountInqCompleted', counts['Completed']);
+        setChip('chipCountInqCancelled', counts['Cancelled']);
+
+        if (inquiries.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8"><div class="admin-state-box"><span class="state-icon">✉</span><h4>No inquiries found</h4><p>No custom cake inquiries match the selected filters.</p></div></td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = inquiries.map(inq => {
+            const registeredBadge = inq.is_registered ? '<span class="admin-badge-registered">Registered</span>' : '';
+            const photoCell = (inq.has_image && inq.inspiration_image)
+                ? `<a href="${escapeHtml(inq.inspiration_image)}" target="_blank" rel="noopener" class="admin-photo-thumb-link"><img src="${escapeHtml(inq.inspiration_image)}" class="admin-item-thumb" alt="Reference"> View</a>`
+                : '<span style="color:var(--muted); font-size:12px;">None</span>';
+
+            return `
+                <tr>
+                    <td><strong>#${escapeHtml(inq.inquiry_id)}</strong></td>
+                    <td>
+                        <span>${formatDate(inq.inquiry_date)}</span>
+                        <span class="admin-item-sub">${formatDateTime(inq.inquiry_date).split(',')[1] || ''}</span>
+                    </td>
+                    <td>
+                        <span class="admin-item-name">${escapeHtml(inq.contact_name)} ${registeredBadge}</span>
+                        <span class="admin-item-sub">${escapeHtml(inq.contact_phone || 'No phone')}</span>
+                        ${inq.contact_email ? `<span class="admin-item-sub">${escapeHtml(inq.contact_email)}</span>` : ''}
+                    </td>
+                    <td>
+                        <strong>${escapeHtml(inq.cake_type)}</strong>
+                        <span class="admin-item-sub">${inq.no_of_servings ? escapeHtml(inq.no_of_servings) + ' servings · ' : ''}${escapeHtml(inq.flavor_name)}</span>
+                        <span class="admin-item-sub">Budget: ${escapeHtml(inq.budget_range)}</span>
+                    </td>
+                    <td>
+                        <span>${formatDate(inq.event_date)}</span>
+                    </td>
+                    <td>
+                        ${photoCell}
+                    </td>
+                    <td>${getInquiryStatusBadge(inq.status_name)}</td>
+                    <td>
+                        <button type="button" class="admin-action-btn" data-action="view-inquiry" data-inquiry-id="${escapeHtml(inq.inquiry_id)}">
+                            View Details
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    async function viewInquiryDetails(inquiryId) {
+        const modal = document.getElementById('adminInquiryModal');
+        const modalBody = document.getElementById('inquiryModalBody');
+        const modalTitle = document.getElementById('inquiryModalTitle');
+        const modalSubtitle = document.getElementById('inquiryModalSubtitle');
+
+        if (!modal || !modalBody) return;
+
+        modalTitle.textContent = 'Loading Inquiry...';
+        modalSubtitle.textContent = 'Fetching inquiry details from database';
+        modalBody.innerHTML = '<div class="admin-state-box"><span class="state-icon">⏳</span><p>Loading inquiry details...</p></div>';
+        modal.classList.add('open');
+
+        const res = await adminFetch(`api/admin-inquiries.php?id=${encodeURIComponent(inquiryId)}`);
+        if (!res.ok || !res.data || !res.data.inquiry) {
+            modalBody.innerHTML = '<div class="admin-state-box"><span class="state-icon">⚠️</span><p>Could not load inquiry details.</p></div>';
+            return;
+        }
+
+        const inq = res.data.inquiry;
+        const statuses = res.data.statuses || [
+            { status_id: 1, status_name: 'Pending' },
+            { status_id: 2, status_name: 'In Review' },
+            { status_id: 3, status_name: 'Quoted' },
+            { status_id: 4, status_name: 'Confirmed' },
+            { status_id: 5, status_name: 'Completed' },
+            { status_id: 6, status_name: 'Cancelled' }
+        ];
+
+        modalTitle.textContent = `Inquiry #${inq.inquiry_id} — ${inq.cake_type}`;
+        modalSubtitle.textContent = `Submitted on ${formatDateTime(inq.inquiry_date)}`;
+
+        const statusOptions = statuses.map(s => `
+            <option value="${escapeHtml(s.status_id)}" ${s.status_id === inq.status_id ? 'selected' : ''}>
+                ${escapeHtml(s.status_name)}
+            </option>
+        `).join('');
+
+        const registeredAccountInfo = inq.customer_id ? `
+            <div class="inquiry-detail-field">
+                <strong>Customer Account:</strong>
+                <span>${escapeHtml(inq.registered_customer_name || 'Customer #' + inq.customer_id)} (${escapeHtml(inq.registered_customer_email || '')})</span>
+            </div>
+        ` : `
+            <div class="inquiry-detail-field">
+                <strong>Customer Account:</strong>
+                <span style="color:var(--muted)">Guest Submission</span>
+            </div>
+        `;
+
+        const photoHtml = inq.inspiration_image ? `
+            <div class="inquiry-photo-box">
+                <h4 style="margin:0 0 10px; font-size:12px; color:var(--muted); text-transform:uppercase;">Customer Inspiration Reference Photo</h4>
+                <a href="${escapeHtml(inq.inspiration_image)}" target="_blank" rel="noopener" title="Click to view full image in new tab">
+                    <img src="${escapeHtml(inq.inspiration_image)}" alt="Inspiration photo">
+                </a>
+                <div style="margin-top:8px;">
+                    <a href="${escapeHtml(inq.inspiration_image)}" target="_blank" rel="noopener" class="admin-photo-thumb-link">↗ Open full resolution photo</a>
+                </div>
+            </div>
+        ` : `
+            <div style="padding:14px; background:#faf8f6; border:1px solid var(--line); border-radius:12px; font-size:13px; color:var(--muted); text-align:center; margin-top:14px;">
+                No reference image was attached to this inquiry.
+            </div>
+        `;
+
+        const designHtml = inq.design_description ? `
+            <div class="inquiry-design-box">
+                <strong style="display:block; margin-bottom:6px; color:var(--muted); text-transform:uppercase; font-size:11px;">Design, Colors & Cake Message:</strong>
+                ${escapeHtml(inq.design_description)}
+            </div>
+        ` : `
+            <div style="padding:14px; background:#faf8f6; border:1px solid var(--line); border-radius:12px; font-size:13px; color:var(--muted); margin-top:14px;">
+                No specific design description provided.
+            </div>
+        `;
+
+        modalBody.innerHTML = `
+            <div class="inquiry-detail-meta-grid">
+                <div class="inquiry-detail-box">
+                    <h4>Customer Contact</h4>
+                    <div class="inquiry-detail-field"><strong>Contact Name:</strong><span>${escapeHtml(inq.contact_name)}</span></div>
+                    <div class="inquiry-detail-field"><strong>Phone / WhatsApp:</strong><span>${escapeHtml(inq.contact_phone || 'None')}</span></div>
+                    <div class="inquiry-detail-field"><strong>Email Address:</strong><span>${escapeHtml(inq.contact_email || 'Not provided')}</span></div>
+                    ${registeredAccountInfo}
+                </div>
+                <div class="inquiry-detail-box">
+                    <h4>Event & Cake Specifications</h4>
+                    <div class="inquiry-detail-field"><strong>Cake Type:</strong><span>${escapeHtml(inq.cake_type)}</span></div>
+                    <div class="inquiry-detail-field"><strong>Event Date:</strong><strong style="color:var(--berry); font-weight:700;">${formatDate(inq.event_date)}</strong></div>
+                    <div class="inquiry-detail-field"><strong>Servings:</strong><span>${inq.no_of_servings ? escapeHtml(inq.no_of_servings) + ' servings' : 'Not specified'}</span></div>
+                    <div class="inquiry-detail-field"><strong>Preferred Flavor:</strong><span>${escapeHtml(inq.flavor_name)}</span></div>
+                    <div class="inquiry-detail-field"><strong>Budget Range:</strong><span>${escapeHtml(inq.budget_range || 'Not specified')}</span></div>
+                </div>
+            </div>
+
+            ${designHtml}
+            ${photoHtml}
+
+            <div class="inquiry-status-card">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:13px; font-weight:600; color:var(--ink);">Current Status:</span>
+                    <span id="modalInqStatusBadge">${getInquiryStatusBadge(inq.status_name)}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <label for="inquiryStatusSelect" style="font-size:13px; color:var(--muted); font-weight:500;">Change Status:</label>
+                    <select id="inquiryStatusSelect" class="admin-form-control" style="width:auto; padding:7px 12px; font-size:13px;">
+                        ${statusOptions}
+                    </select>
+                    <button type="button" class="btn btn-primary btn-sm" id="btnUpdateInquiryStatus" data-inquiry-id="${escapeHtml(inq.inquiry_id)}">
+                        Save Status
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // Bind status update button inside modal
+        const updateBtn = document.getElementById('btnUpdateInquiryStatus');
+        if (updateBtn) {
+            updateBtn.onclick = async () => {
+                const selectEl = document.getElementById('inquiryStatusSelect');
+                const targetStatusId = parseInt(selectEl?.value, 10);
+                if (!targetStatusId) return;
+
+                updateBtn.disabled = true;
+                updateBtn.textContent = 'Saving...';
+
+                const updateRes = await adminFetch('api/admin-inquiries.php', {
+                    method: 'POST',
+                    body: {
+                        action: 'update_status',
+                        inquiry_id: inq.inquiry_id,
+                        status_id: targetStatusId
+                    }
+                });
+
+                updateBtn.disabled = false;
+                updateBtn.textContent = 'Save Status';
+
+                if (updateRes.ok && updateRes.data && updateRes.data.success) {
+                    showToast(updateRes.data.message || 'Status updated successfully.');
+                    const badgeEl = document.getElementById('modalInqStatusBadge');
+                    if (badgeEl) {
+                        badgeEl.innerHTML = getInquiryStatusBadge(updateRes.data.status_name);
+                    }
+                    loadInquiries();
+                } else {
+                    showToast((updateRes.data && updateRes.data.message) || 'Failed to update status.');
+                }
+            };
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
     // Tab Switching & Navigation
     // ─────────────────────────────────────────────────────────────────
 
     function switchAdminTab(tab) {
-        if (!['dashboard', 'orders', 'products', 'inventory'].includes(tab)) {
+        if (!['dashboard', 'orders', 'inquiries', 'products', 'inventory'].includes(tab)) {
             tab = 'dashboard';
         }
         _activeTab = tab;
@@ -1076,6 +1344,7 @@
         // Trigger module load
         if (tab === 'dashboard') loadDashboard();
         if (tab === 'orders') loadOrders();
+        if (tab === 'inquiries') loadInquiries();
         if (tab === 'products') loadProducts();
         if (tab === 'inventory') loadInventory();
     }
@@ -1111,6 +1380,14 @@
             if (viewOrderBtn) {
                 const orderId = viewOrderBtn.getAttribute('data-order-id') || viewOrderBtn.dataset?.orderId;
                 if (orderId) viewOrderDetails(orderId);
+                return;
+            }
+
+            // Action: View Inquiry
+            const viewInqBtn = e.target.closest('[data-action="view-inquiry"]');
+            if (viewInqBtn) {
+                const inqId = viewInqBtn.getAttribute('data-inquiry-id') || viewInqBtn.dataset?.inquiryId;
+                if (inqId) viewInquiryDetails(inqId);
                 return;
             }
 
@@ -1170,6 +1447,19 @@
                 return;
             }
 
+            // Inquiry status chip click
+            const inqChipBtn = e.target.closest('.admin-chip[data-chip-inquiry-status]');
+            if (inqChipBtn) {
+                document.querySelectorAll('.admin-chip[data-chip-inquiry-status]').forEach(c => c.classList.remove('active'));
+                inqChipBtn.classList.add('active');
+                const targetStatus = inqChipBtn.getAttribute('data-chip-inquiry-status') ?? '';
+                _inquiriesState.status = targetStatus;
+                const inqStatusSelect = document.getElementById('inquiriesStatusFilter');
+                if (inqStatusSelect) inqStatusSelect.value = targetStatus;
+                loadInquiries();
+                return;
+            }
+
             // Dashboard quick navigations
             if (e.target.closest('#dashGoOrdersBtn')) {
                 switchAdminTab('orders');
@@ -1187,12 +1477,17 @@
             // Refresh buttons
             if (e.target.closest('#dashRefreshBtn')) { loadDashboard(); return; }
             if (e.target.closest('#ordersRefreshBtn') || e.target.closest('#retryOrdersBtn')) { loadOrders(); return; }
+            if (e.target.closest('#inquiriesRefreshBtn') || e.target.closest('#retryInquiriesBtn')) { loadInquiries(); return; }
             if (e.target.closest('#productsRefreshBtn') || e.target.closest('#retryProductsBtn')) { loadProducts(); return; }
             if (e.target.closest('#inventoryRefreshBtn') || e.target.closest('#retryInventoryBtn')) { loadInventory(); return; }
 
             // Modal closes
             if (e.target.closest('#orderModalCloseBtn') || e.target.id === 'adminOrderModal') {
                 document.getElementById('adminOrderModal')?.classList.remove('open');
+                return;
+            }
+            if (e.target.closest('#inquiryModalCloseBtn') || e.target.id === 'adminInquiryModal') {
+                document.getElementById('adminInquiryModal')?.classList.remove('open');
                 return;
             }
             if (e.target.closest('#productModalCloseBtn') || e.target.closest('#prodFormCancelBtn') || e.target.id === 'adminProductModal') {
@@ -1245,6 +1540,43 @@
                 _ordersState.date = '';
                 document.querySelectorAll('.admin-chip[data-chip-status]').forEach(c => c.classList.toggle('active', (c.getAttribute('data-chip-status') || '') === ''));
                 loadOrders();
+            };
+        }
+
+        // Inquiries filter inputs
+        const inquiriesSearch = document.getElementById('inquiriesSearchInput');
+        if (inquiriesSearch) {
+            inquiriesSearch.oninput = () => {
+                clearTimeout(_inquiriesState.timer);
+                _inquiriesState.timer = setTimeout(() => {
+                    _inquiriesState.search = inquiriesSearch.value.trim();
+                    loadInquiries();
+                }, 280);
+            };
+        }
+
+        const inquiriesStatus = document.getElementById('inquiriesStatusFilter');
+        if (inquiriesStatus) {
+            inquiriesStatus.onchange = () => {
+                _inquiriesState.status = inquiriesStatus.value;
+                document.querySelectorAll('.admin-chip[data-chip-inquiry-status]').forEach(c => {
+                    c.classList.toggle('active', (c.getAttribute('data-chip-inquiry-status') || '') === _inquiriesState.status);
+                });
+                loadInquiries();
+            };
+        }
+
+        const inquiriesClear = document.getElementById('inquiriesClearFiltersBtn');
+        if (inquiriesClear) {
+            inquiriesClear.onclick = () => {
+                if (inquiriesSearch) inquiriesSearch.value = '';
+                if (inquiriesStatus) inquiriesStatus.value = '';
+                _inquiriesState.search = '';
+                _inquiriesState.status = '';
+                document.querySelectorAll('.admin-chip[data-chip-inquiry-status]').forEach(c => {
+                    c.classList.toggle('active', (c.getAttribute('data-chip-inquiry-status') || '') === '');
+                });
+                loadInquiries();
             };
         }
 

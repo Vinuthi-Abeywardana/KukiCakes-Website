@@ -17,10 +17,17 @@ date_default_timezone_set('Asia/Colombo');
 
 // Set plain text output for CLI / web output
 if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
     header('Content-Type: text/plain; charset=utf-8');
+    exit("Forbidden: Database migrations may only be executed via the command line.\n");
 }
 
-require_once __DIR__ . '/../config/db.php';
+// Prevent execution when included or checked by another script
+if (isset($_SERVER['SCRIPT_FILENAME']) && realpath($_SERVER['SCRIPT_FILENAME']) !== realpath(__FILE__)) {
+    return;
+}
+
+require_once __DIR__ . '/../../config/db.php';
 
 $results = [];
 

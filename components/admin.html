@@ -8,6 +8,7 @@
                 <div class="admin-menu">
                     <button class="active" data-admin-tab="dashboard">▦ Dashboard</button>
                     <button data-admin-tab="orders">▤ Orders</button>
+                    <button data-admin-tab="inquiries">✉ Inquiries</button>
                     <button data-admin-tab="products">♢ Products</button>
                     <button data-admin-tab="inventory">♙ Inventory</button>
                     <button class="admin-exit-btn" id="adminExitBtn" title="Back to storefront">← Storefront</button>
@@ -291,6 +292,68 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- ========================================== -->
+                <!-- VIEW 5: INQUIRIES MANAGEMENT               -->
+                <!-- ========================================== -->
+                <div id="admin-view-inquiries" class="admin-view">
+                    <div class="admin-head">
+                        <div>
+                            <small style="color:var(--muted)">Inquiry Management</small>
+                            <h2>Custom Cake Inquiries</h2>
+                        </div>
+                        <div class="admin-head-actions">
+                            <button class="btn btn-light btn-sm" id="inquiriesRefreshBtn" type="button">⟳ Refresh</button>
+                        </div>
+                    </div>
+
+                    <!-- Status Quick Filter Chips -->
+                    <div class="admin-chip-row" id="inquiriesStatusChips">
+                        <button class="admin-chip active" data-chip-inquiry-status="">All Inquiries <b id="chipCountInqAll">0</b></button>
+                        <button class="admin-chip" data-chip-inquiry-status="Pending">Pending <b id="chipCountInqPending">0</b></button>
+                        <button class="admin-chip" data-chip-inquiry-status="In Review">In Review <b id="chipCountInqInReview">0</b></button>
+                        <button class="admin-chip" data-chip-inquiry-status="Quoted">Quoted <b id="chipCountInqQuoted">0</b></button>
+                        <button class="admin-chip" data-chip-inquiry-status="Confirmed">Confirmed <b id="chipCountInqConfirmed">0</b></button>
+                        <button class="admin-chip" data-chip-inquiry-status="Completed">Completed <b id="chipCountInqCompleted">0</b></button>
+                        <button class="admin-chip" data-chip-inquiry-status="Cancelled">Cancelled <b id="chipCountInqCancelled">0</b></button>
+                    </div>
+
+                    <!-- Inquiries Filter Controls -->
+                    <div class="admin-filters">
+                        <input type="search" class="admin-filter-input admin-filter-search" id="inquiriesSearchInput" placeholder="Search by customer name, phone, email, cake type, or ID...">
+                        <select class="admin-filter-select" id="inquiriesStatusFilter">
+                            <option value="">All Statuses</option>
+                            <option value="Pending">Pending</option>
+                            <option value="In Review">In Review</option>
+                            <option value="Quoted">Quoted</option>
+                            <option value="Confirmed">Confirmed</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Cancelled">Cancelled</option>
+                        </select>
+                        <button class="admin-action-btn" id="inquiriesClearFiltersBtn" type="button">Reset</button>
+                    </div>
+
+                    <!-- Inquiries Table -->
+                    <div class="admin-table-wrap">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Inquiry #</th>
+                                    <th>Date</th>
+                                    <th>Customer</th>
+                                    <th>Cake Details</th>
+                                    <th>Event Date</th>
+                                    <th>Photo</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inquiriesTbody">
+                                <tr><td colspan="8"><div class="admin-state-box"><span class="state-icon">⏳</span><p>Loading inquiries from database...</p></div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -421,6 +484,24 @@
                     <button class="btn btn-primary btn-sm" id="stockModalSubmitBtn" type="submit">Save Stock</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- MODAL 4: INQUIRY DETAILS & STATUS UPDATE                       -->
+    <!-- ============================================================== -->
+    <div class="admin-modal-overlay" id="adminInquiryModal">
+        <div class="admin-modal-box wide">
+            <div class="admin-modal-header">
+                <div>
+                    <h3 id="inquiryModalTitle">Custom Cake Inquiry Details</h3>
+                    <p id="inquiryModalSubtitle">Loading inquiry...</p>
+                </div>
+                <button class="admin-modal-close" id="inquiryModalCloseBtn" type="button" aria-label="Close modal">×</button>
+            </div>
+            <div id="inquiryModalBody">
+                <!-- Dynamically constructed -->
+            </div>
         </div>
     </div>
 </div>

@@ -134,9 +134,9 @@ async function testFlow() {
         console.log('\nStep 1: Navigate to #login');
         await cdp.send('Page.navigate', { url: 'http://localhost/KukiCakes-Website/#login' });
         await cdp.waitFor(async () => {
-            return await cdp.eval('document.getElementById("loginFormSection") !== null');
-        });
-        await sleep(1000);
+            return await cdp.eval('document.getElementById("loginFormSection") !== null && typeof window.guardAdminRoute === "function"');
+        }, 8000);
+        await sleep(500);
 
         let loginFormVisible = await cdp.eval('!document.getElementById("loginFormSection")?.hidden');
         assert(loginFormVisible, 'Step 1: Login form section is visible');
@@ -157,7 +157,7 @@ async function testFlow() {
             document.getElementById("forgotPasswordForm").dispatchEvent(new Event("submit", { cancelable: true }));
         `);
 
-        // Step 4: Wait for status box to show reset link
+        // Step 4: Wait for status box to show safe generic confirmation
         await cdp.waitFor(async () => {
             const box = await cdp.eval('document.getElementById("fp-status-box")');
             const hidden = await cdp.eval('document.getElementById("fp-status-box")?.hidden');
@@ -165,13 +165,17 @@ async function testFlow() {
         });
 
         let statusBoxText = await cdp.eval('document.getElementById("fp-status-box")?.textContent');
-        let resetBtnExists = await cdp.eval('!!document.getElementById("fpGoResetBtn")');
-        assert(resetBtnExists, 'Step 4: Status box generated dev reset link button (fpGoResetBtn)');
-        console.log('Status box snippet:', statusBoxText?.replace(/\\s+/g, ' ').slice(0, 100));
+        let hasGenericConfirmation = statusBoxText && statusBoxText.includes('Password Reset Request Received');
+        assert(hasGenericConfirmation, 'Step 4: Status box displayed safe uniform confirmation without leaking token');
+        console.log('Status box snippet:', statusBoxText?.replace(/\s+/g, ' ').slice(0, 100));
 
-        // Step 5: Click Reset Password Now button
-        console.log('\nStep 5: Click "Reset Password Now →"');
-        await cdp.eval('document.getElementById("fpGoResetBtn")?.click()');
+        // Step 5: Acquire test token via secure CLI utility and navigate to reset page
+        console.log('\nStep 5: Generate test reset link via CLI utility and navigate to reset page');
+        const { execSync } = require('child_process');
+        const tokenOut = execSync('C:\\xampp\\php\\php.exe tests/generate_test_reset_token.php vinu@kukicakes.lk').toString();
+        const tokenData = JSON.parse(tokenOut);
+        const resetPageUrl = 'http://localhost/KukiCakes-Website/' + tokenData.reset_url;
+        await cdp.send('Page.navigate', { url: resetPageUrl });
 
         // Step 6: Wait for reset password page and token validation
         await cdp.waitFor(async () => {

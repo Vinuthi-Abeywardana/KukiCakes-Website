@@ -50,8 +50,25 @@ $pdoOptions = [
 try {
     $pdo = new PDO($dsn, DB_USER, DB_PASS, $pdoOptions);
 } catch (PDOException $e) {
-    // Stop execution and show a safe error message.
-    // In production, never expose $e->getMessage() to end users.
+    // Sanitize diagnostic message (mask any passwords or sensitive substrings) and log server-side
+    $safeError = preg_replace('/(password|pass|pwd)=([^\s;&]+)/i', '$1=***', $e->getMessage());
+    error_log('[KukiCakes Database Connection Error] Code ' . $e->getCode() . ': ' . $safeError);
+
+    // Send generic HTTP 500 response without internal details
     http_response_code(500);
-    exit('Database connection failed: ' . $e->getMessage());
+
+    $isApi = (isset($_SERVER['CONTENT_TYPE']) && str_contains($_SERVER['CONTENT_TYPE'], 'json'))
+          || (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json'))
+          || (isset($_SERVER['REQUEST_URI']) && str_contains($_SERVER['REQUEST_URI'], '/api/'));
+
+    if ($isApi && !headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'success' => false,
+            'message' => 'A database error occurred. Please try again later.'
+        ], JSON_UNESCAPED_SLASHES);
+    } else {
+        echo 'Database service unavailable. Please try again later.';
+    }
+    exit;
 }

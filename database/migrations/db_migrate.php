@@ -8,7 +8,19 @@
  * Safe to run multiple times — uses IF NOT EXISTS / ALTER IF NOT EXISTS.
  * Does NOT delete any existing data or tables.
  */
-require_once __DIR__ . '/../config/db.php';
+
+if (php_sapi_name() !== 'cli') {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit("Forbidden: Database migrations may only be executed via the command line.\n");
+}
+
+// Prevent execution when included or checked by another script
+if (isset($_SERVER['SCRIPT_FILENAME']) && realpath($_SERVER['SCRIPT_FILENAME']) !== realpath(__FILE__)) {
+    return;
+}
+
+require_once __DIR__ . '/../../config/db.php';
 
 $results = [];
 
@@ -119,7 +131,7 @@ $results[] = "✓ Table `user_cart_items` created (or already existed).";
 // ---------------------------------------------------------------
 $cakeCount = (int) $pdo->query("SELECT COUNT(*) FROM `cake`")->fetchColumn();
 if ($cakeCount === 0) {
-    $jsPath = __DIR__ . '/../js/data.js';
+    $jsPath = __DIR__ . '/../../js/data.js';
     if (file_exists($jsPath)) {
         $jsData = file_get_contents($jsPath);
         preg_match('/const catalogProducts = \[(.*?)\];\s*const catalogGallery/s', $jsData, $matches);

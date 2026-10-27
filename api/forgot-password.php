@@ -39,10 +39,7 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     respond(['success' => false, 'message' => 'Please enter a valid email address.'], 400);
 }
 
-// ── Check if email service is configured on this environment ──
-$sendmailPath = ini_get('sendmail_path');
-$smtpHost     = ini_get('SMTP');
-$hasMailer    = !empty($sendmailPath) || (!empty($smtpHost) && strtolower($smtpHost) !== 'localhost');
+require_once __DIR__ . '/../config/mail.php';
 
 try {
     $stmt = $pdo->prepare(
@@ -65,10 +62,8 @@ if (!$user || $user['account_status'] !== 'active') {
     // Perform dummy hash to prevent timing attacks
     hash('sha256', random_bytes(32));
     respond([
-        'success'        => true,
-        'message'        => $genericMessage,
-        'email_delivery' => false,
-        'account_found'  => false,
+        'success' => true,
+        'message' => $genericMessage,
     ]);
 }
 
@@ -97,22 +92,70 @@ try {
     respond(['success' => false, 'message' => 'Unable to generate reset link. Please try again.'], 500);
 }
 
-// ── Handle delivery report ─────────────────────────────────────
-// As per project requirements: do NOT pretend an email was sent if
-// there is no configured mail delivery system.
-$response = [
-    'success'        => true,
-    'message'        => $genericMessage,
-    'email_delivery' => $hasMailer,
-    'account_found'  => true,
-];
+// ── Send transactional email via configured SMTP ───────────────
+$resetBaseUrl = defined('APP_URL') ? rtrim(APP_URL, '/') : (
+    (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . '/KukiCakes-Website'
+);
+$resetUrl = $resetBaseUrl . '/reset-password.html?token=' . urlencode($plainToken);
+$recipientName = htmlspecialchars($user['full_name'] ?? 'Valued Customer', ENT_QUOTES, 'UTF-8');
+$subject = 'Reset Your KúkiCakes Password';
 
-if (!$hasMailer) {
-    // In local development/testing without SMTP, return the token & link
-    // so user / evaluator can complete the reset flow.
-    $response['dev_note']    = 'Email delivery is not configured on this server. Use the reset token below to test password reset.';
-    $response['reset_token'] = $plainToken;
-    $response['reset_url']   = '#reset-password?token=' . $plainToken;
+$htmlBody = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #faf7f2; margin: 0; padding: 20px; color: #2d2424; }
+  .wrapper { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #ebd9c8; overflow: hidden; }
+  .header { background: #5c1428; padding: 28px 24px; text-align: center; }
+  .header h1 { margin: 0; font-family: Georgia, serif; color: #fbf5ee; font-size: 26px; letter-spacing: 0.5px; }
+  .header p { margin: 6px 0 0 0; color: #e8c5ab; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; }
+  .content { padding: 32px 28px; line-height: 1.6; }
+  .btn { display: inline-block; background-color: #5c1428; color: #ffffff !important; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; margin: 20px 0; }
+  .footer { background: #fdfaf6; padding: 20px 28px; font-size: 12px; color: #7a6e6b; border-top: 1px solid #ebd9c8; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <h1>KúkiCakes</h1>
+    <p>Cakes made for your moments</p>
+  </div>
+  <div class="content">
+    <p>Hello {$recipientName},</p>
+    <p>We received a request to reset the password for your KúkiCakes account. Click the button below to choose a new password:</p>
+    <div style="text-align: center;">
+      <a href="{$resetUrl}" class="btn" target="_blank" rel="noopener">Reset Your Password</a>
+    </div>
+    <p style="font-size: 13px; color: #666;">Or copy and paste this link into your browser:<br><a href="{$resetUrl}" style="color: #5c1428; word-break: break-all;">{$resetUrl}</a></p>
+    <p style="font-size: 13px; color: #888;">This link will expire in <strong>60 minutes</strong> and can only be used once. If you did not request a password reset, no action is needed and your account remains secure.</p>
+  </div>
+  <div class="footer">
+    KúkiCakes Bakery Studio &bull; Colombo, Sri Lanka<br>
+    Questions? Contact us at orders@kukicakes.lk
+  </div>
+</div>
+</body>
+</html>
+HTML;
+
+$textBody = "Hello {$recipientName},\n\n"
+          . "We received a request to reset your KúkiCakes account password.\n\n"
+          . "Please visit the link below to set a new password:\n"
+          . "{$resetUrl}\n\n"
+          . "This link is valid for 60 minutes and can only be used once.\n"
+          . "If you did not request this, please disregard this email.\n\n"
+          . "— KúkiCakes Colombo";
+
+$mailResult = KukiMailer::send($user['email'], $user['full_name'], $subject, $htmlBody, $textBody);
+if (!$mailResult['success']) {
+    error_log('[KukiCakes forgot-password] Email delivery status: ' . $mailResult['message']);
 }
 
-respond($response);
+// Public response: strictly uniform for registered and unregistered accounts.
+// NEVER expose reset_token, reset_url, dev_note, or account_found in public API response.
+respond([
+    'success' => true,
+    'message' => $genericMessage,
+]);

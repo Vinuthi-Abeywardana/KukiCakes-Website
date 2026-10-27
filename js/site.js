@@ -1,6 +1,6 @@
 const gallery = (window.kukiData && Array.isArray(window.kukiData.gallery)) ? window.kukiData.gallery : [];
-let products = (window.kukiData && Array.isArray(window.kukiData.products)) ? window.kukiData.products : [];
-let isCatalogLoading = false;
+let products = [];
+let isCatalogLoading = true;
 let catalogError = null;
 let cart = JSON.parse(localStorage.getItem('kukiCart') || '[]');
 let activeProduct = null;
@@ -20,7 +20,8 @@ function escapeHtml(str) {
 }
 
 function productCard(product) {
-	return `<article class="product-card" data-cat="${escapeHtml(product.cat || '')}"><div class="product-img" data-product="${product.id}"><img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)}"><span class="badge">${escapeHtml(product.badge || '')}</span></div><div class="product-info"><h3>${escapeHtml(product.name)}</h3><div class="product-meta"><span>From</span><span class="price">${money(product.price)}</span></div><button class="add-btn" data-product="${product.id}">Choose this cake</button></div></article>`;
+	const unitStr = product.sale_unit ? ` <span class="product-unit" style="font-size:12px;opacity:0.8;font-weight:normal;">/ ${escapeHtml(product.sale_unit)}</span>` : '';
+	return `<article class="product-card" data-cat="${escapeHtml(product.cat || '')}"><div class="product-img" data-product="${product.id}"><img src="${escapeHtml(product.img)}" alt="${escapeHtml(product.name)}"><span class="badge">${escapeHtml(product.badge || '')}</span></div><div class="product-info"><h3>${escapeHtml(product.name)}</h3><div class="product-meta"><span>Price</span><span class="price">${money(product.price)}${unitStr}</span></div><button class="add-btn" data-product="${product.id}">Choose this cake</button></div></article>`;
 }
 
 function galleryCard(product) {
@@ -28,14 +29,15 @@ function galleryCard(product) {
 	const nameStr = escapeHtml(product.name || 'Signature Cake');
 	const imgStr = escapeHtml(product.img || '');
 	const badgeStr = product.badge ? `<span class="badge gallery-badge">${escapeHtml(product.badge)}</span>` : '';
+	const unitStr = product.sale_unit ? ` <span style="font-size:11px;opacity:0.85;">/ ${escapeHtml(product.sale_unit)}</span>` : '';
 	return `<article class="gallery-item" data-product="${product.id}" data-cat="${catStr}" tabindex="0" role="button" aria-label="View ${nameStr} details">` +
 		`<img src="${imgStr}" alt="${nameStr}" loading="lazy" onerror="this.onerror=null;this.style.opacity='0.6';">` +
 		badgeStr +
 		`<div class="gallery-overlay">` +
 			`<b>${nameStr}</b>` +
 			`<div class="gallery-overlay-meta">` +
-				`<span>From</span>` +
-				`<span class="gallery-price">${money(product.price)}</span>` +
+				`<span>Price</span>` +
+				`<span class="gallery-price">${money(product.price)}${unitStr}</span>` +
 			`</div>` +
 			`<span class="gallery-cta">Choose this cake →</span>` +
 		`</div>` +
@@ -295,11 +297,34 @@ async function openProduct(id) {
 	$('#modalImage').src = activeProduct.img;
 	$('#modalTitle').textContent = activeProduct.name;
 	$('#modalDesc').textContent = activeProduct.desc;
-	$('#modalPrice').textContent = `From ${money(activeProduct.price)}`;
+	const unitDisplay = activeProduct.sale_unit ? ` · ${activeProduct.sale_unit}` : '';
+	$('#modalPrice').textContent = `${money(activeProduct.price)}${unitDisplay}`;
 	$('#productModal').classList.add('open');
 	document.body.style.overflow = 'hidden';
-	// Reset weight select to first option
-	if ($('#weightSelect')) $('#weightSelect').value = '500g';
+
+	// Dynamically configure unit / size choice using confirmed worksheet values
+	const weightSelect = $('#weightSelect');
+	const weightGroup = weightSelect ? weightSelect.closest('.choice-group') : null;
+	const weightLabel = weightGroup ? weightGroup.querySelector('label') : null;
+	const rawUnitText = activeProduct.confirmed_size || activeProduct.sale_unit || 'Standard size';
+	const unitText = rawUnitText.replace(/\s*\(assumed[^)]*\)/gi, '').trim();
+
+	if (weightSelect) {
+		if (weightLabel) {
+			if (activeProduct.sale_unit && activeProduct.sale_unit.toLowerCase().includes('box')) {
+				weightLabel.textContent = 'Package Size';
+			} else if (activeProduct.cat && activeProduct.cat.includes('wedding')) {
+				weightLabel.textContent = 'Tier Configuration';
+			} else if (activeProduct.cat && activeProduct.cat.includes('number')) {
+				weightLabel.textContent = 'Numeral Configuration';
+			} else {
+				weightLabel.textContent = 'Size / Weight';
+			}
+		}
+		weightSelect.innerHTML = `<option value="${escapeHtml(unitText)}" selected>${escapeHtml(unitText)} — ${money(activeProduct.price)}</option>`;
+		weightSelect.value = unitText;
+	}
+
 	if ($('#cakeFlavor')) $('#cakeFlavor').value = 'Not sure yet';
 	if ($('#specialNote')) $('#specialNote').value = '';
 	const flavorCategories = ['wedding', 'anniversary', 'birthday', 'cupcake', 'engagement', 'graduation', 'party', 'number'];
@@ -323,26 +348,160 @@ window.setClientCart = function(newCart) {
 };
 
 function matchesCartItem(item, itemId, weight, flavor, note) {
-	return item.id === itemId && (item.weight || '500g') === weight && (item.flavor || '') === flavor && (item.note || '') === note;
+	return item.id === itemId && (item.weight || 'Standard') === weight && (item.flavor || '') === flavor && (item.note || '') === note;
 }
 
 function renderCart() {
 	const box = $('#cartItems');
-	box.innerHTML = cart.length ? cart.map(item => `<article class="cart-item"><img src="${item.img}" alt="${item.name}"><div><h3>${item.name}</h3><p>Weight: ${item.weight || '500g'}${item.flavor ? ` · Flavour: ${item.flavor}` : ''}${item.note ? ` · Note: ${item.note}` : ''}</p><div class="qty"><button data-qty="-1" data-id="${item.id}" data-weight="${item.weight || '500g'}" data-flavor="${item.flavor || ''}" data-note="${item.note || ''}">−</button><b>${item.qty}</b><button data-qty="1" data-id="${item.id}" data-weight="${item.weight || '500g'}" data-flavor="${item.flavor || ''}" data-note="${item.note || ''}">+</button></div></div><div class="item-price"><b>${money(item.price * item.qty)}</b><button class="remove" data-remove="${item.id}" data-weight="${item.weight || '500g'}" data-flavor="${item.flavor || ''}" data-note="${item.note || ''}">Remove</button></div></article>`).join('') : '<div class="empty-cart"><div>🎂</div><h3>Your cake box is empty</h3><p class="subtext">A celebration this sweet deserves a cake.</p><button class="btn btn-primary" data-page="cakes">Explore our cakes</button></div>';
+	box.innerHTML = cart.length ? cart.map(item => `<article class="cart-item"><img src="${item.img}" alt="${item.name}"><div><h3>${item.name}</h3><p>Size / Unit: ${item.weight || 'Standard'}${item.flavor ? ` · Flavour: ${item.flavor}` : ''}${item.note ? ` · Note: ${item.note}` : ''}</p><div class="qty"><button data-qty="-1" data-id="${item.id}" data-weight="${item.weight || 'Standard'}" data-flavor="${item.flavor || ''}" data-note="${item.note || ''}">−</button><b>${item.qty}</b><button data-qty="1" data-id="${item.id}" data-weight="${item.weight || 'Standard'}" data-flavor="${item.flavor || ''}" data-note="${item.note || ''}">+</button></div></div><div class="item-price"><b>${money(item.price * item.qty)}</b><button class="remove" data-remove="${item.id}" data-weight="${item.weight || 'Standard'}" data-flavor="${item.flavor || ''}" data-note="${item.note || ''}">Remove</button></div></article>`).join('') : '<div class="empty-cart"><div>🎂</div><h3>Your cake box is empty</h3><p class="subtext">A celebration this sweet deserves a cake.</p><button class="btn btn-primary" data-page="cakes">Explore our cakes</button></div>';
 	const subtotal = cart.reduce((total, item) => total + item.price * item.qty, 0);
 	$('#subtotal').textContent = money(subtotal);
 	$('#total').textContent = money(subtotal);
 }
 
+function getMinDeliveryDateString() {
+	const now = new Date();
+	const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+	const colomboNow = new Date(utc + (330 * 60000));
+	colomboNow.setDate(colomboNow.getDate() + 2); // 48-hour advance notice
+	const yyyy = colomboNow.getFullYear();
+	const mm = String(colomboNow.getMonth() + 1).padStart(2, '0');
+	const dd = String(colomboNow.getDate()).padStart(2, '0');
+	return `${yyyy}-${mm}-${dd}`;
+}
+
+function initDeliveryDateInput() {
+	const input = document.getElementById('deliveryDate');
+	if (!input) return;
+	const minDate = getMinDeliveryDateString();
+	input.min = minDate;
+
+	const validate = () => {
+		let errEl = document.getElementById('deliveryDateErr');
+		if (!errEl) {
+			errEl = document.createElement('span');
+			errEl.id = 'deliveryDateErr';
+			errEl.className = 'field-error';
+			errEl.style.cssText = 'font-size:12px;color:var(--berry);display:none;margin-top:4px;';
+			input.parentNode.appendChild(errEl);
+		}
+		const parts = minDate.split('-');
+		const minFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
+		if (input.value && input.value < minDate) {
+			errEl.textContent = `Celebration cakes require 48 hours notice. Earliest available date: ${minFormatted}.`;
+			errEl.style.display = 'block';
+			input.style.borderColor = 'var(--berry)';
+			return false;
+		} else {
+			errEl.textContent = '';
+			errEl.style.display = 'none';
+			input.style.borderColor = '';
+			return true;
+		}
+	};
+
+	input.addEventListener('change', validate);
+	input.addEventListener('input', validate);
+}
+
+function initInquiryDateInput() {
+	const input = document.getElementById('eventDate');
+	if (!input) return;
+	const minDate = getMinDeliveryDateString();
+	input.min = minDate;
+
+	const validate = () => {
+		let errEl = document.getElementById('eventDateErr');
+		if (!errEl) {
+			errEl = document.createElement('span');
+			errEl.id = 'eventDateErr';
+			errEl.className = 'field-error';
+			errEl.style.cssText = 'font-size:12px;color:var(--berry);display:none;margin-top:4px;';
+			input.parentNode.appendChild(errEl);
+		}
+		const parts = minDate.split('-');
+		const minFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
+		if (input.value && input.value < minDate) {
+			errEl.textContent = `Inquiries require at least 48 hours advance notice (earliest available: ${minFormatted}).`;
+			errEl.style.display = 'block';
+			input.style.borderColor = 'var(--berry)';
+			return false;
+		} else {
+			errEl.textContent = '';
+			errEl.style.display = 'none';
+			input.style.borderColor = '';
+			return true;
+		}
+	};
+
+	input.addEventListener('change', validate);
+	input.addEventListener('input', validate);
+}
+
+async function autofillCheckoutFromProfile() {
+	const nameInput    = document.getElementById('checkoutName');
+	const phoneInput   = document.getElementById('checkoutPhone');
+	const emailInput   = document.getElementById('checkoutEmail');
+	const addressInput = document.getElementById('deliveryAddress');
+
+	const needsAutofill = (nameInput && !nameInput.value.trim()) ||
+	                      (phoneInput && !phoneInput.value.trim()) ||
+	                      (emailInput && !emailInput.value.trim()) ||
+	                      (addressInput && !addressInput.value.trim());
+	if (!needsAutofill) return;
+
+	try {
+		const sessionRes = await fetch('api/check-session.php', { credentials: 'same-origin' });
+		if (!sessionRes.ok) return;
+		const sessionData = await sessionRes.json();
+		if (!sessionData.authenticated || !sessionData.user) return;
+
+		const user = sessionData.user;
+		if (nameInput && !nameInput.value.trim() && user.name) {
+			nameInput.value = user.name;
+		}
+		if (emailInput && !emailInput.value.trim() && user.email) {
+			emailInput.value = user.email;
+		}
+		if (phoneInput && !phoneInput.value.trim() && user.phone) {
+			phoneInput.value = user.phone;
+		}
+
+		if (addressInput && !addressInput.value.trim()) {
+			const addrRes = await fetch('api/addresses.php?type=shipping', { credentials: 'same-origin' });
+			if (addrRes.ok) {
+				const addrData = await addrRes.json();
+				if (addrData.success && Array.isArray(addrData.addresses) && addrData.addresses.length > 0) {
+					const defaultAddr = addrData.addresses.find(a => a.is_default) || addrData.addresses[0];
+					if (defaultAddr) {
+						const parts = [defaultAddr.line1, defaultAddr.line2, defaultAddr.city, defaultAddr.postal].filter(Boolean);
+						addressInput.value = parts.join(', ');
+						if (phoneInput && !phoneInput.value.trim() && defaultAddr.phone) {
+							phoneInput.value = defaultAddr.phone;
+						}
+						if (nameInput && !nameInput.value.trim() && defaultAddr.full_name) {
+							nameInput.value = defaultAddr.full_name;
+						}
+					}
+				}
+			}
+		}
+	} catch (err) {
+		console.warn('[KúkiCakes] Checkout autofill skipped:', err);
+	}
+}
+
 function renderCheckout() {
+	initDeliveryDateInput();
 	const items = $('#checkoutItems');
 	if (!items) return;
-	items.innerHTML = cart.length ? cart.map(item => `<div class="checkout-item"><div><b>${item.name}</b><span>${item.weight || '500g'} · Qty ${item.qty}</span></div><strong>${money(item.price * item.qty)}</strong></div>`).join('') : '<p class="checkout-empty">Your cart is empty. Add a cake before checking out.</p>';
+	items.innerHTML = cart.length ? cart.map(item => `<div class="checkout-item"><div><b>${item.name}</b><span>${item.weight || 'Standard'} · Qty ${item.qty}</span></div><strong>${money(item.price * item.qty)}</strong></div>`).join('') : '<p class="checkout-empty">Your cart is empty. Add a cake before checking out.</p>';
 	const subtotal = cart.reduce((total, item) => total + item.price * item.qty, 0);
 	const delivery = cart.length ? 500 : 0;
 	$('#checkoutSubtotal').textContent = money(subtotal);
 	$('#checkoutDelivery').textContent = money(delivery);
 	$('#checkoutTotal').textContent = money(subtotal + delivery);
+	autofillCheckoutFromProfile();
 }
 
 function renderConfirmation() {
@@ -374,7 +533,7 @@ document.addEventListener('click', event => {
 	const quantity = event.target.closest('[data-qty]');
 	if (quantity) { 
 		const itemId = Number(quantity.dataset.id);
-		const weight = quantity.dataset.weight || '500g';
+		const weight = quantity.dataset.weight || 'Standard';
 		const flavor = quantity.dataset.flavor || '';
 		const note = quantity.dataset.note || '';
 		const item = cart.find(entry => matchesCartItem(entry, itemId, weight, flavor, note)); 
@@ -387,7 +546,7 @@ document.addEventListener('click', event => {
 	const remove = event.target.closest('[data-remove]');
 	if (remove) { 
 		const itemId = Number(remove.dataset.remove);
-		const weight = remove.dataset.weight || '500g';
+		const weight = remove.dataset.weight || 'Standard';
 		const flavor = remove.dataset.flavor || '';
 		const note = remove.dataset.note || '';
 		cart = cart.filter(item => !matchesCartItem(item, itemId, weight, flavor, note)); 
@@ -395,7 +554,23 @@ document.addEventListener('click', event => {
 	}
 });
 
-$('#menuBtn').onclick = () => $('#navLinks').classList.toggle('open');
+if ($('#menuBtn')) {
+	$('#menuBtn').onclick = () => $('#navLinks').classList.toggle('open');
+}
+$('#navLinks')?.querySelectorAll('a').forEach(link => {
+	link.addEventListener('click', () => {
+		$('#navLinks')?.classList.remove('open');
+	});
+});
+document.addEventListener('click', event => {
+	const navLinks = $('#navLinks');
+	const menuBtn = $('#menuBtn');
+	if (navLinks && navLinks.classList.contains('open')) {
+		if (!navLinks.contains(event.target) && (!menuBtn || !menuBtn.contains(event.target))) {
+			navLinks.classList.remove('open');
+		}
+	}
+});
 $('#searchBtn').onclick = () => {
 	$('#siteSearch').classList.toggle('open');
 	if ($('#siteSearch').classList.contains('open')) {
@@ -417,26 +592,168 @@ $('#searchInput').oninput = event => {
 $('#modalClose').onclick = closeModal;
 $('#productModal').onclick = event => { if (event.target.id === 'productModal') closeModal(); };
 $('#modalAdd').onclick = () => { 
-	// Get selected weight from dropdown
-	const selectedWeight = $('#weightSelect').value || '500g';
+	// Get selected unit/size from dropdown
+	const selectedWeight = $('#weightSelect') ? ($('#weightSelect').value || 'Standard') : 'Standard';
 	const selectedFlavor = $('#flavorChoice').hidden ? '' : ($('#cakeFlavor').value || 'Not sure yet');
 	const specialNote = $('#specialNote').value.trim();
-	const existing = cart.find(item => item.id === activeProduct.id && item.weight === selectedWeight && (item.flavor || '') === selectedFlavor && (item.note || '') === specialNote); 
+	const existing = cart.find(item => item.id === activeProduct.id && item.weight === selectedWeight && (item.flavor || '') === selectedFlavor && (item.note || '') === specialNote);
 	if (existing) {
-		existing.qty++; 
+		existing.qty++;
 	} else {
-		cart.push({ ...activeProduct, qty: 1, weight: selectedWeight, flavor: selectedFlavor, note: specialNote }); 
+		cart.push({ ...activeProduct, qty: 1, weight: selectedWeight, flavor: selectedFlavor, note: specialNote });
 	}
-	saveCart(); 
-	closeModal(); 
-	showToast(`${activeProduct.name} (${selectedWeight}) added to your selection`); 
+	saveCart();
+	closeModal();
+	showToast(`${activeProduct.name} added to your selection`);
 };
-$('#quoteForm').onsubmit = event => {
-	event.preventDefault();
-	$('#successMessage').classList.add('show');
-	event.target.querySelector('button[type="submit"]').textContent = 'Inquiry received ✓';
-	showToast('Your cake inquiry is on its way!');
-};
+if ($('#quoteForm')) {
+	const quoteForm = $('#quoteForm');
+	const fileInput = quoteForm.querySelector('#inspiration');
+	const uploadSpan = quoteForm.querySelector('.upload span');
+	const defaultUploadText = uploadSpan ? uploadSpan.textContent : 'Upload a reference photo or sketch';
+
+	if (fileInput && uploadSpan) {
+		fileInput.addEventListener('change', () => {
+			if (fileInput.files && fileInput.files[0]) {
+				uploadSpan.textContent = fileInput.files[0].name;
+			} else {
+				uploadSpan.textContent = defaultUploadText;
+			}
+		});
+	}
+
+	quoteForm.onsubmit = async event => {
+		event.preventDefault();
+		const form = event.target;
+		const submitBtn = form.querySelector('button[type="submit"]');
+		const originalBtnText = submitBtn ? submitBtn.textContent : 'Send my cake inquiry →';
+		const successMsg = $('#successMessage');
+
+		// Client validation
+		const name = (form.querySelector('#name')?.value || '').trim();
+		const phone = (form.querySelector('#phone')?.value || '').trim();
+		const email = (form.querySelector('#email')?.value || '').trim();
+		const cakeType = (form.querySelector('#cakeType')?.value || '').trim();
+		const eventDate = (form.querySelector('#eventDate')?.value || '').trim();
+		const servings = (form.querySelector('#servings')?.value || '').trim();
+
+		if (!name || name.length < 2) {
+			showToast('Please enter your full name (at least 2 characters).');
+			form.querySelector('#name')?.focus();
+			return;
+		}
+		if (!phone || !/^[0-9+\s\-().]{7,20}$/.test(phone)) {
+			showToast('Please enter a valid phone number (at least 7 digits).');
+			form.querySelector('#phone')?.focus();
+			return;
+		}
+		if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			showToast('Please enter a valid email address.');
+			form.querySelector('#email')?.focus();
+			return;
+		}
+		if (!cakeType) {
+			showToast('Please select a cake type.');
+			form.querySelector('#cakeType')?.focus();
+			return;
+		}
+		if (!eventDate) {
+			showToast('Please select your event date.');
+			form.querySelector('#eventDate')?.focus();
+			return;
+		}
+
+		// Prevent past dates and dates under 48 hours notice in Asia/Colombo
+		const minDate = getMinDeliveryDateString();
+		const parts = minDate.split('-');
+		const minFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
+		if (eventDate < minDate) {
+			const errEl = document.getElementById('eventDateErr');
+			if (errEl) {
+				errEl.textContent = `Inquiries require at least 48 hours advance notice (earliest available: ${minFormatted}).`;
+				errEl.style.display = 'block';
+			}
+			showToast(`Inquiries require at least 48 hours advance notice (earliest available: ${minFormatted}).`);
+			form.querySelector('#eventDate')?.focus();
+			return;
+		} else {
+			const errEl = document.getElementById('eventDateErr');
+			if (errEl) {
+				errEl.textContent = '';
+				errEl.style.display = 'none';
+			}
+		}
+
+		if (servings && Number(servings) < 4) {
+			showToast('Number of servings must be at least 4.');
+			form.querySelector('#servings')?.focus();
+			return;
+		}
+
+		// File validation if selected
+		if (fileInput && fileInput.files && fileInput.files[0]) {
+			const file = fileInput.files[0];
+			if (file.size > 5 * 1024 * 1024) {
+				showToast('Inspiration image must be under 5 MB.');
+				return;
+			}
+			const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+			if (!allowedTypes.includes(file.type)) {
+				showToast('Please upload a JPEG, PNG, or WebP image.');
+				return;
+			}
+		}
+
+		if (submitBtn) {
+			submitBtn.disabled = true;
+			submitBtn.textContent = 'Submitting inquiry...';
+		}
+
+		try {
+			const formData = new FormData(form);
+			const response = await fetch('api/inquiries.php', {
+				method: 'POST',
+				body: formData,
+				credentials: 'same-origin'
+			});
+
+			const data = await response.json();
+
+			if (response.ok && data.success) {
+				if (successMsg) {
+					successMsg.classList.add('show');
+					successMsg.textContent = data.message || 'Thank you! Your cake inquiry has been received. KukiCakes will contact you shortly.';
+				}
+				if (submitBtn) {
+					submitBtn.textContent = 'Inquiry received ✓';
+					// Re-enable after short delay in case user wants to submit another
+					setTimeout(() => {
+						submitBtn.disabled = false;
+						submitBtn.textContent = originalBtnText;
+					}, 4000);
+				}
+				form.reset();
+				if (uploadSpan) {
+					uploadSpan.textContent = defaultUploadText;
+				}
+				showToast(data.message || 'Your cake inquiry is on its way!');
+			} else {
+				if (submitBtn) {
+					submitBtn.disabled = false;
+					submitBtn.textContent = originalBtnText;
+				}
+				showToast(data.message || 'Failed to submit inquiry. Please try again.');
+			}
+		} catch (err) {
+			console.error('[KúkiCakes] Inquiry submission error:', err);
+			if (submitBtn) {
+				submitBtn.disabled = false;
+				submitBtn.textContent = originalBtnText;
+			}
+			showToast('Network error submitting inquiry. Please check your connection.');
+		}
+	};
+}
 $('#checkoutBtn').onclick = () => {
 	if (cart.length) goPage('checkout');
 	else showToast('Add a cake before checking out');
@@ -465,6 +782,24 @@ if ($('#checkoutForm')) $('#checkoutForm').onsubmit = async event => {
 
 	if (!fullName || !phoneNo || !email || !deliveryAddress || !deliveryDate || !deliveryTimeSlot) {
 		showToast('Please fill in all required delivery details.');
+		return;
+	}
+
+	const minDate = getMinDeliveryDateString();
+	if (deliveryDate < minDate) {
+		const parts = minDate.split('-');
+		const minFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
+		showToast(`Orders require at least 48 hours notice (from ${minFormatted}).`);
+		const input = document.getElementById('deliveryDate');
+		if (input) {
+			input.focus();
+			input.style.borderColor = 'var(--berry)';
+		}
+		const errEl = document.getElementById('deliveryDateErr');
+		if (errEl) {
+			errEl.textContent = `Celebration cakes require 48 hours notice. Earliest available date: ${minFormatted}.`;
+			errEl.style.display = 'block';
+		}
 		return;
 	}
 
@@ -552,8 +887,25 @@ if ($('#checkoutForm')) $('#checkoutForm').onsubmit = async event => {
 			}
 
 			// Configure PayHere JavaScript SDK callbacks
-			window.payhere.onCompleted = function onCompleted(orderId) {
+			window.payhere.onCompleted = async function onCompleted(orderId) {
 				showToast('Payment completed successfully!');
+
+				try {
+					await fetch('api/confirm-card-payment.php', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+							'Accept': 'application/json'
+						},
+						body: JSON.stringify({
+							order_id: order.order_id,
+							order_number: order.order_number || orderId
+						})
+					});
+				} catch (err) {
+					console.warn('Could not notify server of card payment completion:', err);
+				}
+
 				localStorage.setItem('kukiLastOrder', JSON.stringify({
 					number: order.order_number,
 					total: order.total,
@@ -624,6 +976,8 @@ document.addEventListener('keydown', event => {
 
 loadProducts();
 saveCart();
+initDeliveryDateInput();
+initInquiryDateInput();
 const _knownPages = ['cakes', 'gallery', 'cart', 'checkout', 'confirmation', 'admin', 'signup', 'login', 'profile', 'my-orders', 'auth-guard', 'reset-password', 'forgot-password', 'account'];
 const initialHash = location.hash.slice(1);
 const initialPage = initialHash.split('?')[0].split('&')[0];

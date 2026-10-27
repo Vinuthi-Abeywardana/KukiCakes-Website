@@ -219,6 +219,7 @@ if ($method === 'GET') {
                 o.delivery_time_slot,
                 o.payment_method,
                 o.payment_status,
+                o.payhere_payment_id,
                 o.subtotal,
                 o.delivery_fee,
                 o.total,
@@ -251,6 +252,7 @@ if ($method === 'GET') {
                 'delivery_time_slot' => (string) $row['delivery_time_slot'],
                 'payment_method'     => (string) $row['payment_method'],
                 'payment_status'     => (string) $row['payment_status'],
+                'payhere_payment_id' => $row['payhere_payment_id'] ? (string) $row['payhere_payment_id'] : null,
                 'subtotal'           => (float) $row['subtotal'],
                 'delivery_fee'       => (float) $row['delivery_fee'],
                 'total'              => (float) $row['total'],
@@ -396,9 +398,9 @@ if ($method === 'POST' || $method === 'PUT') {
 
             // 1. Lock the order row to read authoritative status under transaction
             $lockStmt = $pdo->prepare('
-                SELECT order_id, order_number, order_status, payment_status, payment_method 
-                FROM `orders` 
-                WHERE order_id = ? 
+                SELECT order_id, order_number, order_status, payment_status, payment_method, payhere_payment_id
+                FROM `orders`
+                WHERE order_id = ?
                 FOR UPDATE
             ');
             $lockStmt->execute([$targetOrderId]);
@@ -421,17 +423,22 @@ if ($method === 'POST' || $method === 'PUT') {
                 respond(['success' => false, 'message' => 'Cannot revert an already paid order to pending. If the payment has been cancelled or refunded externally, you may update the local payment status to cancelled or charged_back. IMPORTANT: Changing this status does not issue a PayHere refund. Process any card refund separately through your PayHere Merchant Portal.'], 400);
             }
 
-            // 4. Online card payments require verified gateway evidence and cannot be manually marked paid
+            // 4. Online card payments require verified gateway evidence and cannot be marked paid without it
+            $verifiedPayHereId = null;
             if ($newPayStatus === 'paid' && $currentOrder['payment_status'] !== 'paid') {
                 if ($currentOrder['payment_method'] === 'card') {
-                    $pdo->rollBack();
-                    respond([
-                        'success' => false,
-                        'message' => 'Manual payment confirmation is not permitted for online card orders. Card orders must be confirmed through verified PayHere gateway notifications.',
-                    ], 422);
+                    $evidenceId = trim((string) ($body['payhere_payment_id'] ?? $body['payment_reference'] ?? $body['evidence'] ?? $currentOrder['payhere_payment_id'] ?? ''));
+                    if ($evidenceId === '') {
+                        $pdo->rollBack();
+                        respond([
+                            'success' => false,
+                            'message' => 'Manual payment confirmation for online card orders requires verified gateway evidence. Please provide the PayHere Payment ID (from your PayHere Merchant Portal).',
+                        ], 422);
+                    }
+                    $verifiedPayHereId = $evidenceId;
                 }
 
-                // For offline payment methods (transfer, cash): verify stock availability and deduct conditionally
+                // Verify stock availability and deduct conditionally for items
                 $itemsStmt = $pdo->prepare('
                     SELECT cake_id, SUM(quantity) AS total_qty 
                     FROM `order_item` 
@@ -494,17 +501,23 @@ if ($method === 'POST' || $method === 'PUT') {
                 }
             }
 
-            $stmt = $pdo->prepare('UPDATE `orders` SET payment_status = ? WHERE order_id = ?');
-            $stmt->execute([$newPayStatus, $targetOrderId]);
+            if ($verifiedPayHereId !== null) {
+                $stmt = $pdo->prepare('UPDATE `orders` SET payment_status = ?, payhere_payment_id = ? WHERE order_id = ?');
+                $stmt->execute([$newPayStatus, $verifiedPayHereId, $targetOrderId]);
+            } else {
+                $stmt = $pdo->prepare('UPDATE `orders` SET payment_status = ? WHERE order_id = ?');
+                $stmt->execute([$newPayStatus, $targetOrderId]);
+            }
 
             $pdo->commit();
 
             respond([
-                'success'        => true,
-                'message'        => "Order #{$order['order_number']} payment status updated to '{$newPayStatus}'.",
-                'order_id'       => $targetOrderId,
-                'order_number'   => $order['order_number'],
-                'payment_status' => $newPayStatus,
+                'success'            => true,
+                'message'            => "Order #{$order['order_number']} payment status updated to '{$newPayStatus}'.",
+                'order_id'           => $targetOrderId,
+                'order_number'       => $order['order_number'],
+                'payment_status'     => $newPayStatus,
+                'payhere_payment_id' => $verifiedPayHereId ?? $currentOrder['payhere_payment_id'] ?? null,
             ]);
 
         } catch (PDOException $e) {
